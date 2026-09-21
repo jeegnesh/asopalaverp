@@ -1,0 +1,110 @@
+import React from 'react';
+import { useBrandStore } from '@/store/brandStore';
+import { AsopalavLogo } from './AsopalavLogo';
+import { cn } from '@/lib/utils';
+
+/** Strip script tags and event handlers from SVG to prevent XSS */
+const sanitizeSvg = (svg: string): string => {
+  return svg
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/\son\w+\s*=\s*["'][^"']*["']/gi, '')
+    .replace(/\son\w+\s*=\s*\{[^}]*\}/gi, '')
+    .replace(/javascript\s*:/gi, '')
+    .replace(/data\s*:\s*text\/html/gi, '')
+    .replace(/<iframe[\s\S]*?(<\/iframe>|\/>)/gi, '')
+    .replace(/<embed[\s\S]*?(<\/embed>|\/>)/gi, '')
+    .replace(/<object[\s\S]*?(<\/object>|\/>)/gi, '');
+};
+
+interface BrandLogoProps {
+  className?: string;
+  size?: number | string;
+  showText?: boolean;
+  monochrome?: boolean;
+}
+
+export const BrandLogo: React.FC<BrandLogoProps> = ({
+  className,
+  size = 24,
+  showText = false,
+  monochrome = false,
+}) => {
+  const { brandName, logoUrl, logoType, brandSvgContent, monogramText, brandAccentColor } = useBrandStore();
+
+  const numSize = typeof size === 'number' ? size : parseInt(String(size), 10) || 24;
+
+  // 1. Custom Image URL
+  if (logoType === 'image' && logoUrl) {
+    return (
+      <div className={cn('flex items-center gap-2 select-none', className)}>
+        <img
+          src={logoUrl}
+          alt={brandName || 'Brand Logo'}
+          style={{ width: numSize, height: numSize }}
+          className="object-contain shrink-0 rounded-[4px]"
+        />
+        {showText && (
+          <span className="font-medium text-xs text-slate-900 dark:text-white truncate font-sans">
+            {brandName}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  // 2. Custom Raw SVG Content
+  if (logoType === 'svg' && brandSvgContent && brandSvgContent.trim().startsWith('<svg')) {
+    return (
+      <div className={cn('flex items-center gap-2 select-none', className)}>
+        <div
+          style={{ width: numSize, height: numSize }}
+          className="shrink-0 flex items-center justify-center"
+          dangerouslySetInnerHTML={{ __html: sanitizeSvg(brandSvgContent) }}
+        />
+        {showText && (
+          <span className="font-medium text-xs text-slate-900 dark:text-white truncate font-sans">
+            {brandName}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  // 3. Monogram / Badge mode
+  if (logoType === 'monogram' && monogramText) {
+    return (
+      <div className={cn('flex items-center gap-2 select-none', className)}>
+        <div
+          style={{
+            width: numSize,
+            height: numSize,
+            backgroundColor: monochrome ? 'currentColor' : brandAccentColor || '#3ecf8e',
+            color: '#171717',
+          }}
+          className="rounded-[6px] flex items-center justify-center font-mono font-bold text-xs tracking-tight shrink-0 shadow-2xs"
+        >
+          {monogramText.slice(0, 3).toUpperCase()}
+        </div>
+        {showText && (
+          <span className="font-medium text-xs text-slate-900 dark:text-white truncate font-sans">
+            {brandName}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  // 4. Default Official Diamond Logo
+  return (
+    <div className={cn('flex items-center gap-2 select-none', className)}>
+      <AsopalavLogo size={numSize} monochrome={monochrome} />
+      {showText && (
+        <span className="font-medium text-xs text-slate-900 dark:text-white truncate font-sans">
+          {brandName}
+        </span>
+      )}
+    </div>
+  );
+};
+
+export default BrandLogo;

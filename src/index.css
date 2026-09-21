@@ -1,0 +1,620 @@
+@import '@fontsource/inter/index.css';
+@import '@fontsource/jetbrains-mono/index.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-canvas: #ffffff;
+    --color-canvas-soft: #fafafa;
+    --color-canvas-night: #141414;
+    --color-surface-card: #ffffff;
+    --color-ink: #171717;
+    --color-primary: #3ecf8e;
+    --color-primary-deep: #24b47e;
+    --color-hairline: #dfdfdf;
+    --color-hairline-cool: #ededed;
+    --color-hairline-strong: #c7c7c7;
+    --color-hairline-control: #a1a1a1;
+    --color-hairline-dark: #2e2e2e;
+    color-scheme: light dark;
+  }
+
+  html, body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: #ffffff;
+    color: #171717;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    overscroll-behavior-y: contain;
+  }
+
+  .dark body,
+  body.dark,
+  .dark {
+    background-color: #141414;
+    color: #ededed;
+  }
+
+  /* =========================================================
+     SOFT DARK MODE (Charcoal Slate / Anti-Fatigue)
+     ========================================================= */
+  .soft-dark {
+    --color-canvas: #181a20;
+    --color-canvas-soft: #1f222b;
+    --color-canvas-night: #181a20;
+    --color-surface-card: #21242d;
+    --color-ink: #f1f5f9;
+    --color-hairline: #2f3442;
+    --color-hairline-cool: #282c38;
+    --color-hairline-strong: #383e50;
+    --color-hairline-control: #383e50;
+    --color-hairline-dark: #2f3442;
+    color-scheme: dark;
+  }
+
+  .soft-dark,
+  .soft-dark body,
+  body.soft-dark,
+  html.soft-dark,
+  .soft-dark #root {
+    background-color: #181a20 !important;
+    color: #f1f5f9 !important;
+  }
+
+  /* Root Canvas & Base Pages */
+  .soft-dark .dark\:bg-canvas-night,
+  .soft-dark .dark\:bg-\[\#121212\],
+  .soft-dark .dark\:bg-\[\#141414\],
+  .soft-dark .dark\:bg-\[\#151515\],
+  .soft-dark .dark\:bg-\[\#111111\],
+  .soft-dark .dark\:bg-\[\#0f0f0f\],
+  .soft-dark .dark\:bg-slate-950,
+  .soft-dark .dark\:bg-zinc-950 {
+    background-color: #181a20 !important;
+  }
+
+  /* Translucent & Backdrop Canvas Elements (Mobile Nav, Floating Toolbars) */
+  .soft-dark .dark\:bg-\[\#171717\]\/95,
+  .soft-dark .dark\:bg-\[\#141414\]\/95,
+  .soft-dark .dark\:bg-\[\#121212\]\/95,
+  .soft-dark .dark\:bg-\[\#161616\]\/95,
+  .soft-dark .dark\:bg-\[\#181818\]\/95,
+  .soft-dark .dark\:bg-\[\#202020\]\/95 {
+    background-color: rgba(33, 36, 45, 0.95) !important;
+  }
+  .soft-dark .dark\:bg-\[\#141414\]\/90,
+  .soft-dark .dark\:bg-\[\#121212\]\/90,
+  .soft-dark .dark\:bg-\[\#151515\]\/90,
+  .soft-dark .dark\:bg-\[\#161616\]\/90,
+  .soft-dark .dark\:bg-\[\#222222\]\/90,
+  .soft-dark .dark\:bg-canvas-night\/90 {
+    background-color: rgba(24, 26, 32, 0.90) !important;
+  }
+  .soft-dark .dark\:bg-\[\#141414\]\/50,
+  .soft-dark .dark\:bg-\[\#1f1f1f\]\/50 {
+    background-color: rgba(24, 26, 32, 0.50) !important;
+  }
+  .soft-dark .dark\:bg-black\/80,
+  .soft-dark .dark\:bg-black\/85 {
+    background-color: rgba(14, 16, 20, 0.85) !important;
+  }
+
+  /* Primary Cards, Header, Topbar, Modals & Surface Panels */
+  .soft-dark .dark\:bg-\[\#161616\],
+  .soft-dark .dark\:bg-\[\#171717\],
+  .soft-dark .dark\:bg-\[\#181818\],
+  .soft-dark .dark\:bg-\[\#1a1a1a\],
+  .soft-dark .dark\:bg-slate-900,
+  .soft-dark .dark\:bg-zinc-900,
+  .soft-dark .card-container {
+    background-color: #21242d !important;
+  }
+
+  /* Secondary Panels, Table Toolbars, Filter Bars, Chips & Action Buttons */
+  .soft-dark .dark\:bg-\[\#1c1c1c\],
+  .soft-dark .dark\:bg-\[\#1e1e1e\],
+  .soft-dark .dark\:bg-\[\#1f1f1f\],
+  .soft-dark .dark\:bg-\[\#202020\],
+  .soft-dark .dark\:bg-\[\#222222\],
+  .soft-dark .dark\:bg-\[\#222\],
+  .soft-dark .dark\:bg-\[\#242424\],
+  .soft-dark .dark\:bg-\[\#252525\],
+  .soft-dark .dark\:bg-\[\#282828\],
+  .soft-dark .dark\:bg-\[\#2a2a2a\],
+  .soft-dark .dark\:bg-\[\#2c2c2c\],
+  .soft-dark .dark\:bg-\[\#333\],
+  .soft-dark .dark\:bg-slate-800\/50,
+  .soft-dark .dark\:bg-zinc-800\/50 {
+    background-color: #282c37 !important;
+  }
+
+  /* Light Inverted Badges/Buttons in Dark Mode (e.g. dark:bg-white, dark:bg-zinc-100) */
+  .soft-dark .dark\:bg-white,
+  .soft-dark .dark\:bg-zinc-100,
+  .soft-dark .dark\:bg-zinc-200 {
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+  }
+  .soft-dark .dark\:bg-white *,
+  .soft-dark .dark\:bg-zinc-100 *,
+  .soft-dark .dark\:bg-zinc-200 * {
+    color: #0f172a !important;
+  }
+
+  /* Emerald brand buttons / badges */
+  .soft-dark .dark\:bg-\[\#3ecf8e\] {
+    background-color: #3ecf8e !important;
+    color: #121212 !important;
+  }
+  .soft-dark .dark\:bg-\[\#3ecf8e\] * {
+    color: #121212 !important;
+  }
+
+  /* Interactive Elements, Buttons, Hover States & Selected States */
+  .soft-dark .dark\:hover\:bg-\[\#1a1a1a\]:hover,
+  .soft-dark .dark\:hover\:bg-\[\#1e1e1e\]:hover,
+  .soft-dark .dark\:hover\:bg-\[\#1f1f1f\]:hover,
+  .soft-dark .dark\:hover\:bg-\[\#202020\]:hover,
+  .soft-dark .dark\:hover\:bg-\[\#222222\]:hover,
+  .soft-dark .dark\:hover\:bg-\[\#242424\]:hover,
+  .soft-dark .dark\:hover\:bg-\[\#252525\]:hover,
+  .soft-dark .dark\:hover\:bg-\[\#282828\]:hover,
+  .soft-dark .dark\:hover\:bg-\[\#2c2c2c\]:hover,
+  .soft-dark .dark\:hover\:bg-slate-800:hover,
+  .soft-dark .dark\:hover\:bg-zinc-800:hover,
+  .soft-dark .dark\:hover\:bg-slate-700:hover {
+    background-color: #313746 !important;
+  }
+
+  /* Hairline Borders & Dividers */
+  .soft-dark .dark\:border-\[\#181818\],
+  .soft-dark .dark\:border-\[\#202020\],
+  .soft-dark .dark\:border-\[\#222222\],
+  .soft-dark .dark\:border-\[\#242424\],
+  .soft-dark .dark\:border-\[\#252525\],
+  .soft-dark .dark\:border-\[\#262626\],
+  .soft-dark .dark\:border-\[\#282828\],
+  .soft-dark .dark\:border-\[\#2a2a2a\],
+  .soft-dark .dark\:border-\[\#2e2e2e\],
+  .soft-dark .dark\:border-\[\#303030\],
+  .soft-dark .dark\:border-\[\#333333\],
+  .soft-dark .dark\:border-\[\#333\],
+  .soft-dark .dark\:border-\[\#383838\],
+  .soft-dark .dark\:border-\[\#484848\],
+  .soft-dark .dark\:border-hairline-dark,
+  .soft-dark .dark\:border-hairline-strong,
+  .soft-dark .dark\:border-slate-800,
+  .soft-dark .dark\:border-zinc-800,
+  .soft-dark .dark\:border-zinc-700,
+  .soft-dark .dark\:border-slate-200\/90,
+  .soft-dark .dark\:border-slate-200\/80 {
+    border-color: #2f3442 !important;
+  }
+
+  /* Divide Lines */
+  .soft-dark .dark\:divide-\[\#242424\],
+  .soft-dark .dark\:divide-\[\#262626\],
+  .soft-dark .dark\:divide-\[\#282828\],
+  .soft-dark .dark\:divide-\[\#2e2e2e\],
+  .soft-dark .dark\:divide-slate-800,
+  .soft-dark .dark\:divide-zinc-800 {
+    border-color: #2f3442 !important;
+  }
+
+  /* Hover Borders */
+  .soft-dark .dark\:hover\:border-\[\#383838\]:hover,
+  .soft-dark .dark\:hover\:border-\[\#3e3e3e\]:hover,
+  .soft-dark .dark\:hover\:border-\[\#404040\]:hover,
+  .soft-dark .dark\:hover\:border-\[\#484848\]:hover,
+  .soft-dark .dark\:hover\:border-zinc-500:hover,
+  .soft-dark .dark\:hover\:border-slate-700:hover {
+    border-color: #454c60 !important;
+  }
+
+  /* Text Colors in Soft Dark */
+  .soft-dark .dark\:text-white {
+    color: #f8fafc !important;
+  }
+  .soft-dark .dark\:text-zinc-100,
+  .soft-dark .dark\:text-slate-100,
+  .soft-dark .dark\:text-gray-100,
+  .soft-dark .dark\:text-\[\#ededed\] {
+    color: #f1f5f9 !important;
+  }
+  .soft-dark .dark\:text-zinc-200,
+  .soft-dark .dark\:text-slate-200,
+  .soft-dark .dark\:text-gray-200 {
+    color: #e2e8f0 !important;
+  }
+  .soft-dark .dark\:text-zinc-300,
+  .soft-dark .dark\:text-slate-300,
+  .soft-dark .dark\:text-gray-300 {
+    color: #cbd5e1 !important;
+  }
+  .soft-dark .dark\:text-zinc-400,
+  .soft-dark .dark\:text-slate-400,
+  .soft-dark .dark\:text-gray-400,
+  .soft-dark .dark\:text-\[\#a1a1a1\] {
+    color: #94a3b8 !important;
+  }
+  .soft-dark .dark\:text-zinc-500,
+  .soft-dark .dark\:text-slate-500,
+  .soft-dark .dark\:text-gray-500,
+  .soft-dark .dark\:text-\[\#707070\] {
+    color: #64748b !important;
+  }
+  .soft-dark .dark\:text-zinc-600,
+  .soft-dark .dark\:text-zinc-700 {
+    color: #475569 !important;
+  }
+
+  /* Inputs & Form Controls in Soft Dark */
+  .soft-dark input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]),
+  .soft-dark select,
+  .soft-dark textarea {
+    background-color: #1a1c24 !important;
+    border-color: #343a4a !important;
+    color: #f1f5f9 !important;
+  }
+  .soft-dark input:focus,
+  .soft-dark select:focus,
+  .soft-dark textarea:focus {
+    border-color: #3ecf8e !important;
+    box-shadow: 0 0 0 1px #3ecf8e !important;
+  }
+
+  /* Monospace Elements & Badges */
+  .soft-dark .dark\:bg-\[\#222\] {
+    background-color: #2b303d !important;
+  }
+
+  /* AnnouncementBanner: Broadcast mode */
+  .soft-dark .bg-\[\#f8f3ef\],
+  .soft-dark .dark\:bg-\[\#0b0e0d\] {
+    background-color: #0e1114 !important;
+  }
+  .soft-dark .text-\[\#001a10\],
+  .soft-dark .dark\:text-\[\#f8f3ef\] {
+    color: #d4e8dc !important;
+  }
+
+  /* Scrollbars in Soft Dark */
+  .soft-dark ::-webkit-scrollbar-thumb {
+    background: #383e50 !important;
+  }
+  .soft-dark ::-webkit-scrollbar-thumb:hover {
+    background: #474f66 !important;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-weight: 500;
+    letter-spacing: -0.025em;
+  }
+
+  code, pre, kbd, samp {
+    font-family: 'JetBrains Mono', ui-monospace, Menlo, Monaco, Consolas, monospace;
+  }
+
+  /* Clean Enterprise Focus Ring */
+  :focus-visible {
+    outline: 1px solid #3ecf8e;
+    outline-offset: 1px;
+  }
+
+  /* Fine Scrollbars */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 9999px;
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    background: #2e2e2e;
+  }
+}
+
+@layer components {
+  /* =========================================================
+     Enterprise Management ATOMIC BADGES & STATUS PILLS
+     ========================================================= */
+  .badge-status-emerald {
+    background-color: #ecfdf5;
+    color: #065f46;
+    border: 1px solid #6ee7b7;
+  }
+  .dark .badge-status-emerald {
+    background-color: rgba(62, 207, 142, 0.12);
+    color: #3ecf8e;
+    border-color: rgba(62, 207, 142, 0.30);
+  }
+  .soft-dark .badge-status-emerald {
+    background-color: rgba(62, 207, 142, 0.15) !important;
+    color: #3ecf8e !important;
+    border-color: rgba(62, 207, 142, 0.35) !important;
+  }
+
+  .badge-status-amber {
+    background-color: #fffbeb;
+    color: #92400e;
+    border: 1px solid #fcd34d;
+  }
+  .dark .badge-status-amber {
+    background-color: rgba(245, 158, 11, 0.12);
+    color: #fbbf24;
+    border-color: rgba(245, 158, 11, 0.30);
+  }
+  .soft-dark .badge-status-amber {
+    background-color: rgba(245, 158, 11, 0.16) !important;
+    color: #fcd34d !important;
+    border-color: rgba(245, 158, 11, 0.35) !important;
+  }
+
+  .badge-status-rose {
+    background-color: #fff1f2;
+    color: #9f1239;
+    border: 1px solid #fca5a5;
+  }
+  .dark .badge-status-rose {
+    background-color: rgba(244, 63, 94, 0.12);
+    color: #fda4af;
+    border-color: rgba(244, 63, 94, 0.30);
+  }
+  .soft-dark .badge-status-rose {
+    background-color: rgba(244, 63, 94, 0.16) !important;
+    color: #fda4af !important;
+    border-color: rgba(244, 63, 94, 0.35) !important;
+  }
+
+  .badge-status-blue {
+    background-color: #f0f9ff;
+    color: #075985;
+    border: 1px solid #7dd3fc;
+  }
+  .dark .badge-status-blue {
+    background-color: rgba(56, 189, 248, 0.12);
+    color: #7dd3fc;
+    border-color: rgba(56, 189, 248, 0.30);
+  }
+  .soft-dark .badge-status-blue {
+    background-color: rgba(56, 189, 248, 0.16) !important;
+    color: #7dd3fc !important;
+    border-color: rgba(56, 189, 248, 0.35) !important;
+  }
+
+  .badge-status-neutral {
+    background-color: #f1f5f9;
+    color: #1e293b;
+    border: 1px solid #cbd5e1;
+  }
+  .dark .badge-status-neutral {
+    background-color: #202020;
+    color: #e4e4e7;
+    border-color: #3f3f46;
+  }
+  .soft-dark .badge-status-neutral {
+    background-color: #282c38 !important;
+    color: #f1f5f9 !important;
+    border-color: #3f475a !important;
+  }
+
+  /* =========================================================
+     High-Contrast Universal Alert Banners (Light / Dark / Soft-Dark)
+     ========================================================= */
+  .alert-banner-error {
+    background-color: #fff1f2;
+    border: 1px solid #fecdd3;
+    color: #881337;
+  }
+  .dark .alert-banner-error {
+    background-color: rgba(244, 63, 94, 0.10);
+    border-color: rgba(244, 63, 94, 0.30);
+    color: #ffe4e6;
+  }
+  .soft-dark .alert-banner-error {
+    background-color: rgba(244, 63, 94, 0.14) !important;
+    border-color: rgba(244, 63, 94, 0.35) !important;
+    color: #ffe4e6 !important;
+  }
+
+  .alert-banner-warning {
+    background-color: #fffbeb;
+    border: 1px solid #fde68a;
+    color: #78350f;
+  }
+  .dark .alert-banner-warning {
+    background-color: rgba(245, 158, 11, 0.10);
+    border-color: rgba(245, 158, 11, 0.30);
+    color: #fef3c7;
+  }
+  .soft-dark .alert-banner-warning {
+    background-color: rgba(245, 158, 11, 0.14) !important;
+    border-color: rgba(245, 158, 11, 0.35) !important;
+    color: #fef3c7 !important;
+  }
+
+  .alert-banner-success {
+    background-color: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    color: #064e3b;
+  }
+  .dark .alert-banner-success {
+    background-color: rgba(62, 207, 142, 0.10);
+    border-color: rgba(62, 207, 142, 0.30);
+    color: #d1fae5;
+  }
+  .soft-dark .alert-banner-success {
+    background-color: rgba(62, 207, 142, 0.14) !important;
+    border-color: rgba(62, 207, 142, 0.35) !important;
+    color: #d1fae5 !important;
+  }
+
+  .alert-banner-info {
+    background-color: #f0f9ff;
+    border: 1px solid #bae6fd;
+    color: #0c4a6e;
+  }
+  .dark .alert-banner-info {
+    background-color: rgba(56, 189, 248, 0.10);
+    border-color: rgba(56, 189, 248, 0.30);
+    color: #e0f2fe;
+  }
+  .soft-dark .alert-banner-info {
+    background-color: rgba(56, 189, 248, 0.14) !important;
+    border-color: rgba(56, 189, 248, 0.35) !important;
+    color: #e0f2fe !important;
+  }
+
+  /* =========================================================
+     PRIMARY CTA & SECONDARY BUTTONS
+     ========================================================= */
+  .btn-primary-emerald {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background-color: #3ecf8e;
+    color: #171717 !important;
+    border-radius: 6px;
+    padding: 8px 14px;
+    min-height: 36px;
+    font-size: 13px;
+    font-weight: 500;
+    border: 1px solid transparent;
+    transition: background-color 0.15s ease, transform 0.05s ease;
+    cursor: pointer;
+    user-select: none;
+  }
+  .btn-primary-emerald:hover {
+    background-color: #24b47e;
+  }
+  .btn-primary-emerald:active {
+    transform: scale(0.99);
+  }
+
+  /* Outline Button (Crisp Light, Dark & Soft Dark) */
+  .btn-outline-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background-color: #ffffff;
+    color: #0f172a;
+    border-radius: 6px;
+    padding: 8px 14px;
+    min-height: 36px;
+    font-size: 13px;
+    font-weight: 500;
+    border: 1px solid #cbd5e1;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+    transition: all 0.15s ease;
+    cursor: pointer;
+    user-select: none;
+  }
+  .dark .btn-outline-action {
+    background-color: transparent;
+    color: #ededed;
+    border-color: #2e2e2e;
+  }
+  .soft-dark .btn-outline-action {
+    background-color: #242834 !important;
+    color: #f1f5f9 !important;
+    border-color: #353c4d !important;
+  }
+  .btn-outline-action:hover {
+    background-color: #f8fafc;
+    border-color: #94a3b8;
+    color: #020617;
+  }
+  .dark .btn-outline-action:hover {
+    background-color: #202020;
+    border-color: #383838;
+    color: #ffffff;
+  }
+  .soft-dark .btn-outline-action:hover {
+    background-color: #2d3342 !important;
+    border-color: #424b60 !important;
+    color: #ffffff !important;
+  }
+
+  /* Enterprise Management Card */
+  .card-container {
+    background-color: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    transition: border-color 0.15s ease;
+  }
+  .dark .card-container {
+    background-color: #1a1a1a;
+    border: 1px solid #2e2e2e;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  }
+  .soft-dark .card-container {
+    background-color: #21242d !important;
+    border-color: #2f3442 !important;
+  }
+
+  /* Dark Code Block */
+  .code-block-dark {
+    background-color: #141414;
+    border: 1px solid #2e2e2e;
+    border-radius: 6px;
+    padding: 14px;
+    color: #ededed;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .soft-dark .code-block-dark {
+    background-color: #1a1c24 !important;
+    border-color: #2f3442 !important;
+    color: #f1f5f9 !important;
+  }
+}
+
+@layer utilities {
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  /* Native Mobile App Safe Area Inset Utilities */
+  .pb-safe {
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+  .pt-safe {
+    padding-top: max(8px, env(safe-area-inset-top));
+  }
+  .mb-safe {
+    margin-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+  .bottom-safe {
+    bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /* No Scrollbar Utility */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* Mobile App Glass Surfaces */
+  .mobile-glass {
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+}

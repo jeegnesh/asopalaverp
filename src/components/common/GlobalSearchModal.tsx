@@ -1,0 +1,601 @@
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useScrollLock } from '@/hooks/useScrollLock';
+import { useUIStore } from '@/store/uiStore';
+import { useAuthStore } from '@/store/authStore';
+import { useBranchStore } from '@/store/branchStore';
+import { searchEngine, SearchResultItem, SearchCategory } from '@/lib/searchEngine';
+import { formatINR, formatDate, cn, triggerHaptic } from '@/lib/utils';
+import { animateModalOpen, animateModalClose, animateStaggerCards } from '@/lib/animations';
+import {
+  Search,
+  Receipt,
+  Users,
+  Building2,
+  Plus,
+  HandCoins,
+  ShieldAlert,
+  ShieldCheck,
+  Sliders,
+  FileSpreadsheet,
+  Keyboard,
+  Coins,
+  Wallet,
+  ArrowRight,
+  Sparkles,
+  Sun,
+  Moon,
+  Database,
+  FileText,
+  X,
+  Bell,
+  CornerDownLeft,
+  Check,
+} from 'lucide-react';
+import {
+  AppTableIcon,
+  AppAuthIcon,
+  AppAdvisorIcon,
+  AppSettingsIcon,
+} from '@/components/icons/AppIcons';
+import { AsopalavLogo } from '@/components/icons/AsopalavLogo';
+import { Kbd } from '@/components/ui/Kbd';
+import { showToast } from '@/components/ui/ToastContainer';
+
+const CATEGORY_CHIPS: { id: SearchCategory; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { id: 'all', label: 'All', icon: Sparkles },
+  { id: 'vouchers', label: 'Expenses', icon: Receipt },
+  { id: 'advances', label: 'Advances', icon: HandCoins },
+  { id: 'staff', label: 'Staff', icon: Users },
+  { id: 'master', label: 'Settings', icon: Sliders },
+  { id: 'actions', label: 'Actions', icon: ZapIcon },
+];
+
+function ZapIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+    </svg>
+  );
+}
+
+export const GlobalSearchModal: React.FC = () => {
+  const {
+    isSearchOpen,
+    setSearchOpen,
+    setActivePage,
+    openDrawer,
+    setSettleTargetAdvance,
+    setBulkImportOpen,
+    setAdvanceModalOpen,
+    setShortcutsModalOpen,
+    toggleTheme,
+    setTheme,
+  } = useUIStore();
+  const { branches, setSelectedBranchId, selectedBranchId } = useBranchStore();
+
+  useScrollLock(isSearchOpen);
+  const [query, setQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<SearchCategory>('all');
+  const [results, setResults] = useState<SearchResultItem[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const modalRef = useRef<HTMLDivElement | null>(null);
+  const backdropRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const activeItemRef = useRef<HTMLDivElement | null>(null);
+
+  const handleClose = useCallback(() => {
+    animateModalClose(modalRef.current, backdropRef.current, () => {
+      setSearchOpen(false);
+    });
+  }, [setSearchOpen]);
+
+  // Preload search index and reset state when opened
+  useEffect(() => {
+    if (isSearchOpen) {
+      setQuery('');
+      setSelectedCategory('all');
+      setSelectedIndex(0);
+      searchEngine.preloadIndex();
+      window.dispatchEvent(
+        new CustomEvent('asopalav:dropdown-open', { detail: 'command-palette' })
+      );
+      animateModalOpen(modalRef.current, backdropRef.current);
+      const timer = setTimeout(() => inputRef.current?.focus(), 50);
+      return () => clearTimeout(timer);
+    }
+  }, [isSearchOpen]);
+
+  // Search Engine Query Execution
+  useEffect(() => {
+    if (!isSearchOpen) return;
+
+    let isCurrent = true;
+    setIsLoading(true);
+
+    searchEngine
+      .search(query, {
+        category: selectedCategory,
+        branchId: selectedBranchId,
+      })
+      .then((res) => {
+        if (!isCurrent) return;
+        setResults(res.results);
+        setSelectedIndex(0);
+        setIsLoading(false);
+      })
+      .catch((err) => {
+        console.error('Search error in modal:', err);
+        if (isCurrent) setIsLoading(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [query, selectedCategory, selectedBranchId, isSearchOpen]);
+
+  // Auto-scroll selected item into view
+  useEffect(() => {
+    if (activeItemRef.current) {
+      activeItemRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [selectedIndex]);
+
+  // Close on outside dropdown events
+  useEffect(() => {
+    const handleGlobalDropdownOpen = (e: Event) => {
+      const customEvt = e as CustomEvent<string>;
+      if (customEvt.detail !== 'command-palette') {
+        handleClose();
+      }
+    };
+    window.addEventListener('asopalav:dropdown-open', handleGlobalDropdownOpen);
+    return () => window.removeEventListener('asopalav:dropdown-open', handleGlobalDropdownOpen);
+  }, [handleClose]);
+
+  // Click outside to close
+  useEffect(() => {
+    if (!isSearchOpen) return;
+
+    function handleOutsideClick(e: MouseEvent | TouchEvent) {
+      if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
+        handleClose();
+      }
+    }
+
+    document.addEventListener('pointerdown', handleOutsideClick as any);
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsideClick as any);
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [isSearchOpen, handleClose]);
+
+  // Direct Open Action Handler
+  const handleExecuteResult = (item: SearchResultItem) => {
+    triggerHaptic('selection');
+    handleClose();
+
+    if (item.actionType === 'open_voucher' && item.rawItem) {
+      openDrawer(item.rawItem);
+      showToast({
+        type: 'info',
+        title: 'Opening Voucher',
+        message: `Voucher #${item.rawItem.voucher_number}`,
+      });
+    } else if (item.actionType === 'open_advance' && item.rawItem) {
+      setSettleTargetAdvance(item.rawItem);
+      showToast({
+        type: 'info',
+        title: 'Opening Staff Advance',
+        message: `Advance #${item.rawItem.receipt_number} for ${item.rawItem.staff_name}`,
+      });
+    } else if (item.actionType === 'navigate' && item.actionPayload) {
+      setActivePage(item.actionPayload.page);
+    } else if (item.id.startsWith('cmd-branch-')) {
+      const branchId = item.id.replace('cmd-branch-', '');
+      setSelectedBranchId(branchId);
+      showToast({
+        type: 'success',
+        title: 'Showroom Switched',
+        message: `Active branch set to ${item.title}`,
+      });
+    } else {
+      setActivePage('dashboard');
+    }
+  };
+
+  // Master Default Studio Commands
+  const defaultCommands: SearchResultItem[] = useMemo(() => {
+    return [
+      {
+        id: 'cmd-switch-branch',
+        category: 'master',
+        title: 'Switch Branch Outlet...',
+        categoryLabel: 'SHOP BRANCHES',
+        subtitle: 'Switch active branch between Satellite, Flagship & All',
+        badge: { text: 'Branch', variant: 'neutral' as const },
+        relevanceScore: 110,
+        actionType: 'navigate' as const,
+        actionPayload: { page: 'settings' },
+      },
+      {
+        id: 'cmd-new-expense',
+        category: 'vouchers',
+        title: 'Add New Expense',
+        categoryLabel: 'SHOP WORK',
+        subtitle: 'Pay bill from cash box or shop bank UPI',
+        badge: { text: 'F2', variant: 'neutral' as const },
+        relevanceScore: 100,
+        actionType: 'navigate' as const,
+        actionPayload: { page: 'new-voucher' },
+      },
+      {
+        id: 'cmd-closing',
+        category: 'vouchers',
+        title: 'Daily Cash Closing',
+        categoryLabel: 'SHOP WORK',
+        subtitle: 'Count cash notes in box & match with accounts',
+        badge: { text: 'F9', variant: 'neutral' as const },
+        relevanceScore: 95,
+        actionType: 'navigate' as const,
+        actionPayload: { page: 'closing' },
+      },
+      {
+        id: 'cmd-cash-drawer',
+        category: 'vouchers',
+        title: 'Cash Box & Bank',
+        categoryLabel: 'SHOP WORK',
+        subtitle: 'Check cash in box, bank UPI balance & move cash to safe',
+        badge: { text: 'F4', variant: 'neutral' as const },
+        relevanceScore: 90,
+        actionType: 'navigate' as const,
+        actionPayload: { page: 'treasury' },
+      },
+      {
+        id: 'cmd-advances',
+        category: 'advances',
+        title: 'Staff Advances',
+        categoryLabel: 'SHOP WORK',
+        subtitle: 'Give staff advances & clear with bills or cash returns',
+        badge: { text: 'F7', variant: 'neutral' as const },
+        relevanceScore: 85,
+        actionType: 'navigate' as const,
+        actionPayload: { page: 'advances' },
+      },
+      {
+        id: 'cmd-ledger',
+        category: 'vouchers',
+        title: 'All Expenses',
+        categoryLabel: 'RECORDS & REGISTERS',
+        subtitle: 'Browse all shop expense bills with filters & export',
+        badge: { text: 'F3', variant: 'neutral' as const },
+        relevanceScore: 80,
+        actionType: 'navigate' as const,
+        actionPayload: { page: 'expenses' },
+      },
+      {
+        id: 'cmd-staff',
+        category: 'staff',
+        title: 'Staff Directory',
+        categoryLabel: 'RECORDS & REGISTERS',
+        subtitle: 'Manage staff logins, PINs & team members',
+        badge: { text: 'F10', variant: 'neutral' as const },
+        relevanceScore: 75,
+        actionType: 'navigate' as const,
+        actionPayload: { page: 'staff' },
+      },
+      {
+        id: 'cmd-settings',
+        category: 'master',
+        title: 'Shop Settings',
+        categoryLabel: 'SETTINGS & TEAM',
+        subtitle: 'Set up branches, expense types & accounting locks',
+        badge: { text: 'F11', variant: 'neutral' as const },
+        relevanceScore: 70,
+        actionType: 'navigate' as const,
+        actionPayload: { page: 'settings' },
+      },
+      {
+        id: 'cmd-audit',
+        category: 'master',
+        title: 'Activity History',
+        categoryLabel: 'SETTINGS & TEAM',
+        subtitle: 'View history of who did what and when',
+        badge: { text: 'F8', variant: 'neutral' as const },
+        relevanceScore: 65,
+        actionType: 'navigate' as const,
+        actionPayload: { page: 'audit' },
+      },
+      {
+        id: 'cmd-notifications',
+        category: 'actions',
+        title: 'Alerts & Messages',
+        categoryLabel: 'SYSTEM & TOOLS',
+        subtitle: 'Safe drop alerts, overdue advances & closing warnings',
+        badge: { text: 'Alerts', variant: 'neutral' as const },
+        relevanceScore: 60,
+        actionType: 'navigate' as const,
+        actionPayload: { page: 'notifications' },
+      },
+      {
+        id: 'cmd-shortcuts',
+        category: 'actions',
+        title: 'Keyboard Shortcuts',
+        categoryLabel: 'SYSTEM & TOOLS',
+        subtitle: 'View all keyboard shortcuts and POS hotkeys',
+        badge: { text: 'F1', variant: 'neutral' as const },
+        relevanceScore: 55,
+        actionType: 'navigate' as const,
+        actionPayload: { page: 'dashboard' },
+      },
+      {
+        id: 'cmd-lock',
+        category: 'actions',
+        title: 'Lock Screen',
+        categoryLabel: 'SYSTEM & TOOLS',
+        subtitle: 'Instantly lock screen with PIN protection',
+        badge: { text: 'F12', variant: 'neutral' as const },
+        relevanceScore: 50,
+        actionType: 'navigate' as const,
+        actionPayload: { page: 'dashboard' },
+      },
+    ];
+  }, []);
+
+  // Display Items: either search results or default quick actions
+  const displayItems = query.trim() ? results : defaultCommands;
+
+  // Keyboard navigation inside modal
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      handleClose();
+    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      handleClose();
+      setActivePage('search');
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (displayItems.length > 0) {
+        setSelectedIndex((prev) => (prev + 1) % displayItems.length);
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (displayItems.length > 0) {
+        setSelectedIndex((prev) => (prev - 1 + displayItems.length) % displayItems.length);
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (displayItems[selectedIndex]) {
+        const item = displayItems[selectedIndex] as SearchResultItem;
+        if (item.id === 'cmd-shortcuts') {
+          handleClose();
+          setShortcutsModalOpen(true);
+        } else if (item.id === 'cmd-lock') {
+          handleClose();
+          useAuthStore.getState().lockScreen();
+        } else {
+          handleExecuteResult(item);
+        }
+      }
+    }
+  };
+
+  // Group items by category for clear section headers
+  const groupedSections = useMemo(() => {
+    if (!query.trim()) {
+      const groups: Record<string, SearchResultItem[]> = {};
+      defaultCommands.forEach((item) => {
+        const label = item.categoryLabel || 'COMMANDS';
+        if (!groups[label]) groups[label] = [];
+        groups[label].push(item);
+      });
+      return Object.entries(groups).map(([title, items]) => ({ title, items }));
+    }
+
+    const map = new Map<string, SearchResultItem[]>();
+    displayItems.forEach((item) => {
+      const sectionName =
+        item.category === 'vouchers'
+          ? 'EXPENSES & BILLS'
+          : item.category === 'advances'
+          ? 'STAFF ADVANCES'
+          : item.category === 'staff'
+          ? 'STAFF DIRECTORY'
+          : item.category === 'master'
+          ? 'SHOP SETTINGS'
+          : 'ACTIONS & SHORTCUTS';
+
+      if (!map.has(sectionName)) {
+        map.set(sectionName, []);
+      }
+      map.get(sectionName)!.push(item as SearchResultItem);
+    });
+
+    return Array.from(map.entries()).map(([title, items]) => ({ title, items }));
+  }, [query, displayItems, defaultCommands]);
+
+  if (!isSearchOpen) return null;
+
+  let itemCounter = 0;
+
+  const getItemIcon = (item: SearchResultItem) => {
+    if (item.id === 'cmd-switch-branch') return Sliders;
+    if (item.id === 'cmd-new-expense') return Receipt;
+    if (item.id === 'cmd-closing') return Coins;
+    if (item.id === 'cmd-cash-drawer') return Wallet;
+    if (item.id === 'cmd-advances') return HandCoins;
+    if (item.id === 'cmd-ledger') return AppTableIcon;
+    if (item.id === 'cmd-staff') return Users;
+    if (item.id === 'cmd-settings') return Sliders;
+    if (item.id === 'cmd-audit') return ShieldCheck;
+    if (item.id === 'cmd-notifications') return Bell;
+    if (item.id === 'cmd-shortcuts') return Keyboard;
+    if (item.id === 'cmd-lock') return ShieldAlert;
+
+    if (item.category === 'vouchers') return Receipt;
+    if (item.category === 'advances') return HandCoins;
+    if (item.category === 'staff') return Users;
+    if (item.category === 'master') return Database;
+    return Search;
+  };
+
+  return (
+    <div
+      ref={backdropRef}
+      className="fixed inset-0 z-50 bg-black/60 dark:bg-black/80 backdrop-blur-xs flex items-start justify-center pt-4 sm:pt-16 md:pt-20 p-2 sm:p-4 select-none font-sans"
+      onKeyDown={handleKeyDown}
+    >
+      <div
+        ref={modalRef}
+        className="w-full max-w-xl bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#2e2e2e] rounded-[12px] shadow-2xl overflow-hidden text-slate-900 dark:text-zinc-100 font-sans flex flex-col max-h-[80vh]"
+      >
+        {/* Top Search Input Header (Supabase Studio cmdk) */}
+        <div className="flex items-center gap-3 px-4 py-3.5 border-b border-slate-200 dark:border-[#262626] bg-white dark:bg-[#1a1a1a] shrink-0">
+          <Search className="w-4 h-4 text-slate-400 dark:text-[#707070] shrink-0 stroke-[2]" />
+          <input
+            ref={inputRef}
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search expenses, staff, cash box, or run a command..."
+            className="w-full bg-transparent text-sm text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-[#707070] focus:outline-none font-sans"
+          />
+          {query && (
+            <button
+              type="button"
+              onClick={() => {
+                setQuery('');
+                inputRef.current?.focus();
+              }}
+              className="p-1 rounded-[4px] hover:bg-slate-100 dark:hover:bg-[#282828] text-slate-400 dark:text-zinc-400 transition-colors cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <Kbd size="xs" className="shrink-0">ESC</Kbd>
+        </div>
+
+        {/* Scrollable Results List */}
+        <div ref={listRef} className="overflow-y-auto max-h-[50vh] p-1.5 space-y-3">
+          {groupedSections.map((sec) => (
+            <div key={sec.title} className="space-y-0.5">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400 dark:text-[#707070] px-3 pt-2 pb-1 font-medium">
+                {sec.title}
+              </div>
+
+              {sec.items.map((item) => {
+                const itemIdx = itemCounter++;
+                const isSelected = selectedIndex === itemIdx;
+                const Icon = getItemIcon(item as SearchResultItem);
+
+                return (
+                  <div
+                    key={item.id}
+                    ref={isSelected ? activeItemRef : undefined}
+                    onClick={() => {
+                      if (item.id === 'cmd-shortcuts') {
+                        handleClose();
+                        setShortcutsModalOpen(true);
+                      } else if (item.id === 'cmd-lock') {
+                        handleClose();
+                        useAuthStore.getState().lockScreen();
+                      } else {
+                        handleExecuteResult(item as SearchResultItem);
+                      }
+                    }}
+                    onMouseEnter={() => setSelectedIndex(itemIdx)}
+                    className={cn(
+                      'px-3 py-2 rounded-[6px] flex items-center justify-between gap-3 text-xs transition-colors cursor-pointer select-none',
+                      isSelected
+                        ? 'bg-slate-100 dark:bg-[#282828] text-slate-900 dark:text-white'
+                        : 'text-slate-700 dark:text-[#a1a1a1] hover:bg-slate-50 dark:hover:bg-[#202020] hover:text-slate-900 dark:hover:text-white'
+                    )}
+                  >
+                    {/* Left: Icon & Title */}
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <Icon className={cn(
+                        'w-4 h-4 shrink-0 transition-colors stroke-[1.8]',
+                        isSelected ? 'text-slate-900 dark:text-white' : 'text-slate-400 dark:text-[#707070]'
+                      )} />
+                      <div className="truncate min-w-0">
+                        <span className="font-normal text-xs truncate block font-sans">
+                          {item.title}
+                        </span>
+                        {item.subtitle && !item.id.startsWith('cmd-') && (
+                          <span className="text-[11px] text-slate-400 dark:text-[#707070] truncate block font-sans">
+                            {item.subtitle}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right: Shortcut Badge or Amount */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {item.amount !== undefined && item.amount > 0 && (
+                        <span className="font-mono text-xs font-medium text-emerald-600 dark:text-[#3ecf8e] tabular-nums">
+                          {formatINR(item.amount)}
+                        </span>
+                      )}
+
+                      {item.badge && item.badge.text && (
+                        <kbd className="px-1.5 py-0.5 rounded-[4px] bg-black/5 dark:bg-white/10 text-[10px] font-mono font-medium text-slate-500 dark:text-[#a1a1a1] border border-black/10 dark:border-white/10">
+                          {item.badge.text}
+                        </kbd>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+
+          {displayItems.length === 0 && (
+            <div className="py-12 text-center text-xs text-slate-400 dark:text-zinc-500 font-sans space-y-1">
+              <Search className="w-5 h-5 mx-auto text-slate-300 dark:text-[#525252]" />
+              <p>No commands or results found for "{query}"</p>
+              <p className="text-[11px] text-slate-400 dark:text-[#707070]">
+                Try searching for a voucher #, staff name, or press ESC.
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Minimalist Studio Footer */}
+        <div className="px-4 py-2 border-t border-slate-200 dark:border-[#262626] bg-slate-50/60 dark:bg-[#141414] flex items-center justify-between text-[10px] font-mono text-slate-400 dark:text-[#707070] shrink-0">
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1">
+              <kbd className="px-1 py-0.2 rounded bg-black/5 dark:bg-white/10 border border-black/10 dark:border-white/10 text-[9px]">↑</kbd>
+              <kbd className="px-1 py-0.2 rounded bg-black/5 dark:bg-white/10 border border-black/10 dark:border-white/10 text-[9px]">↓</kbd>
+              <span className="ml-0.5">navigate</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <kbd className="px-1 py-0.2 rounded bg-black/5 dark:bg-white/10 border border-black/10 dark:border-white/10 text-[9px]">↵</kbd>
+              <span className="ml-0.5">select</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <kbd className="px-1 py-0.2 rounded bg-black/5 dark:bg-white/10 border border-black/10 dark:border-white/10 text-[9px]">ESC</kbd>
+              <span className="ml-0.5">close</span>
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              handleClose();
+              setActivePage('search');
+            }}
+            className="hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer text-[#3ecf8e]"
+          >
+            Full Search Hub →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default GlobalSearchModal;

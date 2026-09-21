@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Environment variables & secrets (NEVER commit these)
+.env
+.env.local
+.env.development
+.env.production
+.env.staging
+.env*.local
+*.pem
+*.key
+
+# Database dumps, scripts & exports
+database/
+scripts/
+*.sql
+*.sqlite
+
+# AI Agents & IDE metadata
+.agents/
+.gemini/
+scratch/
+.vscode/
+.idea/
+*.swp
+*.swo
+erpskill.md
+skills-lock.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs & cache
+*.log
+npm-debug.log*
+.cache/

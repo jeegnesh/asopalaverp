@@ -1,0 +1,541 @@
+import React, { useState } from 'react';
+import { useUIStore } from '@/store/uiStore';
+import { useAuthStore } from '@/store/authStore';
+import { erpService } from '@/lib/erpService';
+import { SlideOverDrawer } from '@/components/ui/SlideOverDrawer';
+import { formatINR, formatDate, printThermalVoucherSlip, numberToWordsINR, triggerHaptic } from '@/lib/utils';
+import { ThermalReceiptSlip } from '@/components/ui/ThermalReceiptSlip';
+import {
+  Printer,
+  XCircle,
+  Eye,
+  CreditCard,
+  FileText,
+  AlertTriangle,
+  Receipt,
+  Trash2,
+  CheckCircle2,
+  AlertCircle,
+  Building2,
+  Calendar,
+  Wallet,
+  Tag,
+  Copy,
+  Check,
+  Code2,
+  FileCode,
+  ShieldCheck,
+  Smartphone,
+  Truck,
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+import { showToast } from '@/components/ui/ToastContainer';
+import { useOverrideStore } from '@/store/overrideStore';
+
+export const VoucherDetailDrawer: React.FC = () => {
+  const { activeDrawerVoucher, closeDrawer, openLightbox } = useUIStore();
+  const { user, can } = useAuthStore();
+  const { isCashierVoidAllowed } = useOverrideStore();
+
+  const [activeTab, setActiveTab] = useState<'details' | 'thermal_slip' | 'developer'>('details');
+  const [activeAction, setActiveAction] = useState<'none' | 'void' | 'delete'>('none');
+  const [actionReason, setActionReason] = useState('');
+  const [loadingAction, setLoadingAction] = useState(false);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  if (!activeDrawerVoucher) return null;
+
+  const v = activeDrawerVoucher;
+  const isDeveloper = user?.role_code === 'Developer' || user?.role_code === 'Super_Admin';
+  const isSuperAdmin = user?.role_code === 'Super_Admin' || isDeveloper;
+  const allowCashierVoid = isCashierVoidAllowed();
+  const canVoid = can('can_void_voucher') || isSuperAdmin || user?.role_code === 'Store_Manager' || allowCashierVoid;
+
+  const handleCopyText = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    triggerHaptic('light');
+    setCopiedCode(label);
+    showToast({
+      type: 'success',
+      title: 'Copied to Clipboard',
+      message: `${label} copied.`,
+    });
+    setTimeout(() => setCopiedCode(null), 1800);
+  };
+
+  const handleVoidVoucher = async () => {
+    if (!actionReason || actionReason.trim().length < 3) {
+      setFeedback({ type: 'error', message: 'Void reason is required (minimum 3 characters).' });
+      return;
+    }
+
+    setLoadingAction(true);
+    setFeedback(null);
+    try {
+      await erpService.voidVoucher(
+        v,
+        actionReason.trim(),
+        `${user?.first_name} ${user?.last_name}`,
+        user?.role_code || 'Super_Admin'
+      );
+      showToast({
+        type: 'success',
+        title: 'Voucher Voided',
+        message: `Voucher #${v.voucher_number} voided. Funds refunded to ${v.payment_method.replace('_', ' ')}.`,
+      });
+      setFeedback({
+        type: 'success',
+        message: `Voucher ${v.voucher_number} voided and ₹${v.total_amount} refunded to ${v.payment_method}.`,
+      });
+      setTimeout(() => {
+        closeDrawer();
+      }, 800);
+    } catch (err: any) {
+      console.error('Error voiding voucher:', err);
+      setFeedback({ type: 'error', message: 'Failed to void voucher: ' + (err.message || 'Unknown error') });
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
+  const handleDeleteVoucher = async () => {
+    if (!actionReason || actionReason.trim().length < 3) {
+      setFeedback({ type: 'error', message: 'Super Admin deletion reason is mandatory for audit trail.' });
+      return;
+    }
+
+    setLoadingAction(true);
+    setFeedback(null);
+    try {
+      await erpService.deleteVoucher(
+        v,
+        `${user?.first_name} ${user?.last_name}`,
+        'Super_Admin',
+        actionReason.trim()
+      );
+      showToast({
+        type: 'success',
+        title: 'Voucher Deleted',
+        message: `Voucher #${v.voucher_number} permanently purged from system.`,
+      });
+      setFeedback({
+        type: 'success',
+        message: `Voucher ${v.voucher_number} permanently deleted by Super Admin.`,
+      });
+      setTimeout(() => {
+        closeDrawer();
+      }, 800);
+    } catch (err: any) {
+      setFeedback({ type: 'error', message: 'Failed to delete voucher: ' + (err.message || 'Unknown error') });
+    } finally {
+      setLoadingAction(false);
+    }
+  };
+
+  const handlePrint = () => {
+    printThermalVoucherSlip(v);
+    showToast({
+      type: 'activity',
+      title: 'Printing Bill Slip',
+      message: `Thermal 80mm slip for Bill #${v.voucher_number} sent to printer.`,
+    });
+  };
+
+  const sqlInsertString = `INSERT INTO expense_vouchers (
+  id, voucher_number, branch_id, branch_code, payment_date, payment_method,
+  total_amount, recipient_name, category_name, department_name,
+  remarks, bill_number, created_by_name, status, created_at
+) VALUES (
+  '${v.id}', '${v.voucher_number}', '${v.branch_id}', '${v.branch_code}', '${v.payment_date}', '${v.payment_method}',
+  ${v.total_amount}, '${v.recipient_name.replace(/'/g, "''")}', '${v.category_name}', ${v.department_name ? `'${v.department_name}'` : 'NULL'},
+  ${v.remarks ? `'${v.remarks.replace(/'/g, "''")}'` : 'NULL'}, ${v.bill_number ? `'${v.bill_number}'` : 'NULL'}, '${v.created_by_name}', '${v.status}', '${v.created_at}'
+);`;
+
+  const statusBadge = (
+    <span
+      className={cn(
+        'px-2 py-0.5 rounded-[4px] text-[10px] font-mono font-medium border select-none',
+        v.status === 'Approved' || !v.status
+          ? 'badge-status-emerald'
+          : v.status === 'Voided'
+          ? 'badge-status-rose'
+          : 'badge-status-amber'
+      )}
+    >
+      ● {v.status || 'Approved'}
+    </span>
+  );
+
+  const drawerFooter = (
+    <>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={handlePrint}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] border border-slate-300 dark:border-[#2e2e2e] bg-slate-100 dark:bg-[#202020] hover:bg-slate-200 dark:hover:bg-[#282828] text-slate-900 dark:text-white text-xs font-sans transition-colors cursor-pointer min-h-[34px]"
+        >
+          <Printer className="w-3.5 h-3.5 text-primary" />
+          <span>Print Slip</span>
+        </button>
+
+        {canVoid && v.status !== 'Voided' && (
+          <button
+            type="button"
+            onClick={() => setActiveAction(activeAction === 'void' ? 'none' : 'void')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-sans transition-colors cursor-pointer min-h-[34px]"
+          >
+            <XCircle className="w-3.5 h-3.5" />
+            <span>Cancel Bill (Void)</span>
+          </button>
+        )}
+
+        {isSuperAdmin && (
+          <button
+            type="button"
+            onClick={() => setActiveAction(activeAction === 'delete' ? 'none' : 'delete')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[6px] border border-rose-600 bg-rose-600 hover:bg-rose-700 text-white text-xs font-sans transition-colors cursor-pointer min-h-[34px]"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Delete (Admin)</span>
+          </button>
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={closeDrawer}
+        className="inline-flex items-center gap-1 px-3.5 py-1.5 rounded-[6px] bg-[#3ecf8e] hover:bg-[#24b47e] text-[#171717] text-xs font-medium font-sans transition-colors cursor-pointer shadow-xs min-h-[34px]"
+      >
+        <span>Done</span>
+      </button>
+    </>
+  );
+
+  return (
+    <SlideOverDrawer
+      isOpen={Boolean(activeDrawerVoucher)}
+      onClose={closeDrawer}
+      title={`Expense Bill #${v.voucher_number}`}
+      subtitle={`Recorded ${formatDate(v.payment_date)} • ${v.branch_code} • ${v.payment_method === 'Physical_Cash' ? 'Cash Box' : 'Bank UPI'}`}
+      badge={statusBadge}
+      copyId={v.voucher_number}
+      size="full"
+      footer={drawerFooter}
+    >
+      <div className="max-w-4xl mx-auto w-full space-y-4 text-xs font-sans">
+        {/* Navigation Tabs */}
+        <div className="flex items-center gap-1 p-0.5 rounded-[6px] bg-slate-100 dark:bg-[#141414] border border-slate-200 dark:border-[#2e2e2e]">
+          <button
+            type="button"
+            onClick={() => setActiveTab('details')}
+            className={cn(
+              'flex-1 py-1.5 px-3 rounded-[4px] text-xs font-sans transition-colors cursor-pointer min-h-[30px]',
+              activeTab === 'details'
+                ? 'bg-white dark:bg-[#202020] text-slate-900 dark:text-white font-medium shadow-xs border border-slate-200 dark:border-[#2e2e2e]'
+                : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+            )}
+          >
+            Bill Details
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('thermal_slip')}
+            className={cn(
+              'flex-1 py-1.5 px-3 rounded-[4px] text-xs font-sans transition-colors cursor-pointer min-h-[30px]',
+              activeTab === 'thermal_slip'
+                ? 'bg-white dark:bg-[#202020] text-slate-900 dark:text-white font-medium shadow-xs border border-slate-200 dark:border-[#2e2e2e]'
+                : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+            )}
+          >
+            Print Slip (80mm)
+          </button>
+          {isDeveloper && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('developer')}
+              className={cn(
+                'flex-1 py-1.5 px-3 rounded-[4px] text-xs font-sans transition-colors cursor-pointer min-h-[30px]',
+                activeTab === 'developer'
+                  ? 'bg-white dark:bg-[#202020] text-slate-900 dark:text-white font-medium shadow-xs border border-slate-200 dark:border-[#2e2e2e]'
+                  : 'text-slate-500 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
+              )}
+            >
+              Code Data
+            </button>
+          )}
+        </div>
+
+        {/* Tab 1: Voucher Details */}
+        {activeTab === 'details' && (
+          <div className="space-y-4 font-sans">
+            {/* Amount Hero Card */}
+            <div className="p-4 rounded-[12px] bg-slate-50 dark:bg-[#171717] border border-slate-200 dark:border-[#242424] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+              <div>
+                <span className="text-[11px] text-slate-500 dark:text-zinc-400 block uppercase tracking-wider font-mono">
+                  Total Paid Amount
+                </span>
+                <div className="text-2xl font-mono tabular-nums font-medium text-slate-900 dark:text-white mt-0.5">
+                  {formatINR(v.total_amount)}
+                </div>
+                <p className="text-xs font-sans text-emerald-600 dark:text-[#3ecf8e] mt-0.5 font-medium">
+                  {numberToWordsINR(Number(v.total_amount))}
+                </p>
+              </div>
+
+              <div className="text-left sm:text-right space-y-1">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] bg-white dark:bg-[#202020] border border-slate-200 dark:border-[#2e2e2e] text-xs font-mono text-slate-900 dark:text-white">
+                  {v.payment_method === 'Physical_Cash' ? (
+                    <>
+                      <Wallet className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Physical Cash Till</span>
+                    </>
+                  ) : (
+                    <>
+                      <Smartphone className="w-3.5 h-3.5 text-blue-500" />
+                      <span>Online Bank UPI</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Key Information Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="p-3 rounded-[8px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#242424] space-y-1 shadow-xs">
+                <span className="text-[10px] uppercase font-mono tracking-wider text-slate-500 dark:text-zinc-400 block">
+                  Recipient / Payee
+                </span>
+                <span className="text-xs font-medium text-slate-900 dark:text-white block font-sans">
+                  {v.recipient_name}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-[8px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#242424] space-y-1 shadow-xs">
+                <span className="text-[10px] uppercase font-mono tracking-wider text-slate-500 dark:text-zinc-400 block">
+                  Showroom Outlet
+                </span>
+                <span className="text-xs font-mono font-medium text-slate-900 dark:text-white block">
+                  {v.branch_code}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-[8px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#242424] space-y-1 shadow-xs">
+                <span className="text-[10px] uppercase font-mono tracking-wider text-slate-500 dark:text-zinc-400 block">
+                  Expense Category
+                </span>
+                <span className="text-xs font-medium text-emerald-600 dark:text-[#3ecf8e] block font-sans">
+                  {v.category_name}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-[8px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#242424] space-y-1 shadow-xs">
+                <span className="text-[10px] uppercase font-mono tracking-wider text-slate-500 dark:text-zinc-400 block">
+                  Department
+                </span>
+                <span className="text-xs font-medium text-slate-900 dark:text-white block font-sans">
+                  {v.department_name || 'Main Shop Floor'}
+                </span>
+              </div>
+            </div>
+
+            {/* Bill Info & Courier (if applicable) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="p-3 rounded-[8px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#242424] space-y-1 shadow-xs">
+                <span className="text-[10px] uppercase font-mono tracking-wider text-slate-500 dark:text-zinc-400 block">
+                  Vendor Bill Number
+                </span>
+                <span className="text-xs font-mono text-slate-900 dark:text-white block">
+                  {v.bill_number || 'N/A (Cash Voucher)'}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-[8px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#242424] space-y-1 shadow-xs">
+                <span className="text-[10px] uppercase font-mono tracking-wider text-slate-500 dark:text-zinc-400 block">
+                  Recorded By
+                </span>
+                <span className="text-xs text-slate-900 dark:text-white block">
+                  {v.created_by_name || 'Cashier'}
+                </span>
+              </div>
+            </div>
+
+            {/* Courier info if present */}
+            {v.courier_partner_name && (
+              <div className="p-3 rounded-[8px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#242424] flex items-center justify-between shadow-xs">
+                <div className="flex items-center gap-2">
+                  <Truck className="w-4 h-4 text-blue-500" />
+                  <span className="text-xs text-slate-900 dark:text-white font-medium">{v.courier_partner_name}</span>
+                </div>
+                <span className="text-xs font-mono text-slate-500 dark:text-zinc-400">Parcel Logistics</span>
+              </div>
+            )}
+
+            {/* Remarks Section */}
+            {v.remarks && (
+              <div className="p-3.5 rounded-[8px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#242424] space-y-1 shadow-xs">
+                <span className="text-[10px] uppercase font-mono tracking-wider text-slate-500 dark:text-zinc-400 block">
+                  Notes & Purpose
+                </span>
+                <p className="text-xs text-slate-900 dark:text-white font-sans leading-relaxed">
+                  {v.remarks}
+                </p>
+              </div>
+            )}
+
+            {/* Bill Evidence Photo Attachments */}
+            {v.bill_photo_urls && v.bill_photo_urls.length > 0 && (
+              <div className="space-y-2 p-3.5 rounded-[12px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#242424] shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-mono text-slate-500 dark:text-zinc-400 block">
+                    ATTACHED PROOF OF BILL ({v.bill_photo_urls.length})
+                  </span>
+                  <span className="text-[10px] font-mono text-slate-400 dark:text-zinc-500">Click to zoom</span>
+                </div>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {v.bill_photo_urls.map((url: string, idx: number) => (
+                    <div
+                      key={idx}
+                      onClick={() => openLightbox(url)}
+                      className="relative h-20 rounded-[6px] overflow-hidden border border-slate-200 dark:border-[#2e2e2e] cursor-pointer group bg-slate-100 dark:bg-[#202020]"
+                    >
+                      <img src={url} alt={`Bill #${idx + 1}`} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                        <Eye className="w-4 h-4" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Void / Delete Confirmation Form */}
+            {activeAction !== 'none' && (
+              <div className="p-3.5 rounded-[8px] bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 space-y-2 font-sans text-xs">
+                <div className="flex items-center gap-2 text-rose-900 dark:text-rose-200 font-semibold">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                  <span>
+                    Confirm {activeAction === 'void' ? 'Voucher Void & Till Reversal' : 'Permanent Deletion (Super Admin)'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-rose-700 dark:text-rose-300 font-medium leading-relaxed">
+                  {activeAction === 'void'
+                    ? 'Voiding this voucher will immediately refund ₹' + v.total_amount + ' back into the branch cash/UPI wallet balance and record a tamper-proof audit log.'
+                    : 'Permanent deletion is restricted to Super Admin and removes this voucher permanently.'}
+                </p>
+                <textarea
+                  rows={2}
+                  value={actionReason}
+                  onChange={(e) => setActionReason(e.target.value)}
+                  placeholder={`Mandatory reason for ${activeAction === 'void' ? 'voiding' : 'deleting'} voucher...`}
+                  className="w-full bg-white dark:bg-[#141414] border border-rose-300 dark:border-rose-500/40 rounded-[6px] p-2 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-rose-500"
+                />
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setActiveAction('none')}
+                    className="px-3 py-1 rounded-[4px] border border-slate-300 dark:border-[#2e2e2e] bg-white dark:bg-[#202020] text-slate-700 dark:text-white cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={loadingAction}
+                    onClick={activeAction === 'void' ? handleVoidVoucher : handleDeleteVoucher}
+                    className="px-3.5 py-1 rounded-[4px] bg-rose-600 hover:bg-rose-700 text-white font-medium cursor-pointer"
+                  >
+                    {loadingAction ? 'Processing...' : `Confirm ${activeAction === 'void' ? 'Void' : 'Delete'}`}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Feedback Message */}
+            {feedback && (
+              <div
+                className={cn(
+                  'p-3 rounded-[6px] border font-sans text-xs font-medium',
+                  feedback.type === 'success'
+                    ? 'bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/30 text-emerald-900 dark:text-emerald-200'
+                    : 'bg-rose-50 dark:bg-rose-500/10 border-rose-200 dark:border-rose-500/30 text-rose-900 dark:text-rose-200'
+                )}
+              >
+                {feedback.message}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 2: 80mm Thermal Receipt Slip Preview */}
+        {activeTab === 'thermal_slip' && (
+          <div className="space-y-3 font-sans">
+            <div className="flex items-center justify-between p-2 rounded-[6px] bg-slate-100 dark:bg-[#141414] border border-slate-200 dark:border-[#2e2e2e]">
+              <span className="text-xs text-slate-500 dark:text-zinc-400 font-mono">
+                80mm Thermal Slip Layout
+              </span>
+              <button
+                type="button"
+                onClick={handlePrint}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-[4px] bg-[#3ecf8e] hover:bg-[#24b47e] text-[#171717] text-xs font-sans font-medium cursor-pointer transition-colors"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print Slip</span>
+              </button>
+            </div>
+            <div className="max-w-xs mx-auto">
+              <ThermalReceiptSlip voucher={v} />
+            </div>
+          </div>
+        )}
+
+        {/* Tab 3: Developer Enterprise (SQL / JSON) */}
+        {activeTab === 'developer' && (
+          <div className="space-y-4 font-sans">
+            {/* SQL Insert Preview */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-mono uppercase tracking-wider text-slate-500 dark:text-zinc-400 flex items-center gap-1.5">
+                  <FileCode className="w-3.5 h-3.5 text-emerald-600 dark:text-[#3ecf8e]" />
+                  <span>PostgreSQL Insert Query</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleCopyText(sqlInsertString, 'sql')}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-slate-100 dark:bg-[#202020] hover:bg-slate-200 dark:hover:bg-[#282828] text-slate-900 dark:text-white border border-slate-200 dark:border-[#2e2e2e] text-[10px] font-mono cursor-pointer"
+                >
+                  {copiedCode === 'sql' ? <Check className="w-3 h-3 text-[#3ecf8e] stroke-[2.5]" /> : <Copy className="w-3 h-3" />}
+                  <span>{copiedCode === 'sql' ? 'COPIED' : 'COPY SQL'}</span>
+                </button>
+              </div>
+              <pre className="p-3 rounded-[8px] bg-slate-100 dark:bg-[#121212] border border-slate-200 dark:border-[#2e2e2e] font-mono text-[11px] text-slate-800 dark:text-zinc-200 overflow-x-auto whitespace-pre-wrap leading-relaxed select-text">
+                {sqlInsertString}
+              </pre>
+            </div>
+
+            {/* JSON Object */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-mono uppercase tracking-wider text-slate-500 dark:text-zinc-400 flex items-center gap-1.5">
+                  <Code2 className="w-3.5 h-3.5 text-blue-500" />
+                  <span>Raw Record JSON Object</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleCopyText(JSON.stringify(v, null, 2), 'json')}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-slate-100 dark:bg-[#202020] hover:bg-slate-200 dark:hover:bg-[#282828] text-slate-900 dark:text-white border border-slate-200 dark:border-[#2e2e2e] text-[10px] font-mono cursor-pointer"
+                >
+                  {copiedCode === 'json' ? <Check className="w-3 h-3 text-[#3ecf8e] stroke-[2.5]" /> : <Copy className="w-3 h-3" />}
+                  <span>{copiedCode === 'json' ? 'COPIED' : 'COPY JSON'}</span>
+                </button>
+              </div>
+              <pre className="p-3 rounded-[8px] bg-slate-100 dark:bg-[#121212] border border-slate-200 dark:border-[#2e2e2e] font-mono text-[11px] text-emerald-600 dark:text-[#3ecf8e] overflow-x-auto select-text leading-relaxed">
+                {JSON.stringify(v, null, 2)}
+              </pre>
+            </div>
+          </div>
+        )}
+      </div>
+    </SlideOverDrawer>
+  );
+};

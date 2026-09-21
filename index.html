@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en" class="dark" data-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#141414" id="theme-color-meta" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Asopalav ERP" />
+    <title>Asopalav ERP - Showroom Counter & Treasury</title>
+    <script>
+      (function() {
+        try {
+          var saved = localStorage.getItem('asopalav-theme');
+          if (saved === 'light') {
+            document.documentElement.classList.remove('dark', 'soft-dark');
+            document.documentElement.setAttribute('data-theme', 'light');
+          } else if (saved === 'soft-dark') {
+            document.documentElement.classList.add('dark', 'soft-dark');
+            document.documentElement.setAttribute('data-theme', 'soft-dark');
+          } else {
+            document.documentElement.classList.add('dark');
+            document.documentElement.classList.remove('soft-dark');
+            document.documentElement.setAttribute('data-theme', 'dark');
+          }
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
