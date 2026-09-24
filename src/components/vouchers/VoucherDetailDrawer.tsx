@@ -221,7 +221,7 @@ export const VoucherDetailDrawer: React.FC = () => {
       subtitle={`Recorded ${formatDate(v.payment_date)} • ${v.branch_code} • ${v.payment_method === 'Physical_Cash' ? 'Cash Box' : 'Bank UPI'}`}
       badge={statusBadge}
       copyId={v.voucher_number}
-      size="full"
+      size="xl"
       footer={drawerFooter}
     >
       <div className="max-w-4xl mx-auto w-full space-y-4 text-xs font-sans">
@@ -340,8 +340,8 @@ export const VoucherDetailDrawer: React.FC = () => {
               </div>
             </div>
 
-            {/* Bill Info & Courier (if applicable) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Bill Info & Staff Requester */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="p-3 rounded-[8px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#242424] space-y-1 shadow-xs">
                 <span className="text-[10px] uppercase font-mono tracking-wider text-slate-500 dark:text-zinc-400 block">
                   Vendor Bill Number
@@ -353,13 +353,68 @@ export const VoucherDetailDrawer: React.FC = () => {
 
               <div className="p-3 rounded-[8px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#242424] space-y-1 shadow-xs">
                 <span className="text-[10px] uppercase font-mono tracking-wider text-slate-500 dark:text-zinc-400 block">
-                  Recorded By
+                  Requested / Ordered By
+                </span>
+                <span className="text-xs text-slate-900 dark:text-white font-medium block">
+                  {v.requested_by_staff_name ? (
+                    <span className="text-emerald-600 dark:text-[#3ecf8e]">
+                      {v.requested_by_staff_name} {v.requested_by_staff_code && `(${v.requested_by_staff_code})`}
+                    </span>
+                  ) : (
+                    'Central Counter'
+                  )}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-[8px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#242424] space-y-1 shadow-xs">
+                <span className="text-[10px] uppercase font-mono tracking-wider text-slate-500 dark:text-zinc-400 block">
+                  Recorded By (Cashier)
                 </span>
                 <span className="text-xs text-slate-900 dark:text-white block">
                   {v.created_by_name || 'Cashier'}
                 </span>
               </div>
             </div>
+
+            {/* Multi-Vendor Line Items Breakdown if present */}
+            {v.vendor_splits && v.vendor_splits.length > 0 && (
+              <div className="p-3.5 rounded-[12px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#242424] space-y-2.5 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-mono text-slate-500 dark:text-zinc-400 uppercase tracking-wider block">
+                    Itemized Vendor Bills ({v.vendor_splits.length})
+                  </span>
+                  <span className="text-xs font-mono font-medium text-emerald-600 dark:text-[#3ecf8e]">
+                    Total: ₹{formatINR(v.total_amount)}
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-[#262626] text-[10px] font-mono text-slate-400 uppercase">
+                        <th className="py-1.5 px-2">#</th>
+                        <th className="py-1.5 px-2">Vendor / Shop</th>
+                        <th className="py-1.5 px-2">Category</th>
+                        <th className="py-1.5 px-2">Dept</th>
+                        <th className="py-1.5 px-2">Bill / Details</th>
+                        <th className="py-1.5 px-2 text-right">Amount (₹)</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-[#222]">
+                      {v.vendor_splits.map((vs: any, idx: number) => (
+                        <tr key={idx} className="hover:bg-slate-50/60 dark:hover:bg-[#1f1f1f]">
+                          <td className="py-1.5 px-2 font-mono text-slate-400">{idx + 1}</td>
+                          <td className="py-1.5 px-2 font-medium text-slate-900 dark:text-white">{vs.vendor_name}</td>
+                          <td className="py-1.5 px-2 text-slate-600 dark:text-zinc-300">{vs.category_name}</td>
+                          <td className="py-1.5 px-2 text-slate-500 dark:text-zinc-400">{vs.department_name || '-'}</td>
+                          <td className="py-1.5 px-2 font-mono text-[11px] text-slate-500">{vs.bill_number || vs.description || '-'}</td>
+                          <td className="py-1.5 px-2 text-right font-mono font-semibold text-slate-900 dark:text-white">₹{formatINR(vs.amount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {/* Courier info if present */}
             {v.courier_partner_name && (

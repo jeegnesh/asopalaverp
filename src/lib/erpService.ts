@@ -69,6 +69,7 @@ export interface FloatTopupParams {
   referenceNotes?: string;
   authorizedByName: string;
   receivedByName: string;
+  createdAt?: string;
 }
 
 export interface SafeDropParams {
@@ -189,7 +190,7 @@ class ERPService {
           .select('*')
           .or(`branch_id.eq.${canonicalId},branch_id.eq.${code}`)
           .maybeSingle();
-        if (data && (data.cash_balance > 0 || data.upi_balance > 0)) return data;
+        if (data) return data;
       }
     } catch (e) {
       console.warn('Branch wallet fetched from memory/cache', e);
@@ -202,8 +203,8 @@ class ERPService {
       const allWallets = Object.values(SEED_BRANCH_WALLETS);
       return {
         branch_id: 'ALL',
-        cash_balance: allWallets.reduce((s, w) => s + w.cash_balance, 0),
-        upi_balance: allWallets.reduce((s, w) => s + w.upi_balance, 0),
+        cash_balance: allWallets.reduce((s, w) => s + (Number(w.cash_balance) || 0), 0),
+        upi_balance: allWallets.reduce((s, w) => s + (Number(w.upi_balance) || 0), 0),
       };
     }
 
@@ -212,8 +213,8 @@ class ERPService {
       SEED_BRANCH_WALLETS[branchId] ||
       SEED_BRANCH_WALLETS[`Aellp-${code}`] || {
         branch_id: canonicalId,
-        cash_balance: 35000,
-        upi_balance: 75000,
+        cash_balance: 0,
+        upi_balance: 0,
       };
 
     localStorage.setItem(`asopalav_wallet_${canonicalId}`, JSON.stringify(seed));
@@ -291,12 +292,12 @@ class ERPService {
     return seedLedger;
   }
 
-  async appendLedgerEntry(entry: Omit<WalletLedger, 'id' | 'ledger_sequence' | 'created_at'>) {
+  async appendLedgerEntry(entry: Omit<WalletLedger, 'id' | 'ledger_sequence' | 'created_at'> & { created_at?: string }) {
     const fullEntry: WalletLedger = {
       ...entry,
       id: crypto.randomUUID(),
       ledger_sequence: Date.now(),
-      created_at: new Date().toISOString(),
+      created_at: entry.created_at || new Date().toISOString(),
     };
 
     const existing = await this.getWalletLedger(entry.branch_id);
@@ -710,6 +711,10 @@ class ERPService {
       department_name: voucher.department_name || null,
       department_code: voucher.department_code || null,
       courier_partner_name: (voucher as any).courier_company || (voucher as any).courier_partner_name || null,
+      requested_by_staff_code: voucher.requested_by_staff_code || null,
+      requested_by_staff_name: voucher.requested_by_staff_name || null,
+      vendor_splits: voucher.vendor_splits || null,
+      bill_number: voucher.bill_number || null,
       remarks: voucher.remarks,
       bill_photo_urls: voucher.bill_photo_urls || [],
       created_by_name: voucher.created_by_name || userName,
@@ -1202,6 +1207,7 @@ class ERPService {
       throw new Error('Float top-up amount must be a positive number greater than zero.');
     }
     const allocNumber = `FLT-${Date.now().toString().slice(-6)}`;
+    const recordTimestamp = params.createdAt ? new Date(params.createdAt).toISOString() : new Date().toISOString();
     const fullAllocation: FloatAllocation = {
       id: crypto.randomUUID(),
       allocation_number: allocNumber,
@@ -1213,7 +1219,7 @@ class ERPService {
       authorized_by_name: params.authorizedByName,
       received_by_name: params.receivedByName,
       status: 'Verified',
-      created_at: new Date().toISOString(),
+      created_at: recordTimestamp,
     };
 
     // 1. Credit Branch Wallet
@@ -1240,6 +1246,7 @@ class ERPService {
       running_balance: newBalance,
       remarks: params.referenceNotes || 'Head office cash drawer injection',
       cashier_name: params.receivedByName,
+      created_at: recordTimestamp,
     });
 
     // 3. Insert Float Record

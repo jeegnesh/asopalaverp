@@ -272,7 +272,7 @@ const ResetUserPasswordModal: React.FC<ResetUserPasswordModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 selection:bg-[#3ecf8e]/20 selection:text-[#3ecf8e]">
+    <div className="fixed inset-0 z-50 bg-black/60 dark:bg-black/75 backdrop-blur-md flex items-center justify-center p-4 selection:bg-[#3ecf8e]/20 selection:text-[#3ecf8e]">
       <div
         className="w-full max-w-md bg-white dark:bg-[#161616] border border-slate-200 dark:border-[#282828] rounded-[12px] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh]"
         role="dialog"
@@ -529,15 +529,18 @@ const ResetUserPasswordModal: React.FC<ResetUserPasswordModalProps> = ({
 };
 
 export const StaffDirectoryPage: React.FC = () => {
-  const { user, can } = useAuthStore();
+  const { user, can, getAllowedBranches } = useAuthStore();
   const isDeveloper = user?.role_code === 'Developer' || user?.role_code === 'Super_Admin';
   const { branches, selectedBranchId } = useBranchStore();
   const { setBulkImportOpen } = useUIStore();
   const { staff, refresh } = useVouchers();
 
+  const allowedBranches = getAllowedBranches(branches);
+  const canViewAll = user?.role_code === 'Super_Admin' || user?.role_code === 'Developer' || can('can_view_all_branches');
+
   const [activeTab, setActiveTab] = useState<'logins' | 'staff'>('logins');
   const [search, setSearch] = useState('');
-  const [staffBranchFilter, setStaffBranchFilter] = useState(selectedBranchId || 'ALL');
+  const [staffBranchFilter, setStaffBranchFilter] = useState(canViewAll ? (selectedBranchId || 'ALL') : (allowedBranches[0]?.branch_id || 'Aellp-ASI'));
   const [usersList, setUsersList] = useState<AppUser[]>([]);
   const [rolesList, setRolesList] = useState<AppRole[]>([]);
   const [permissionsList, setPermissionsList] = useState<RolePermissions[]>([]);
@@ -1160,11 +1163,11 @@ export const StaffDirectoryPage: React.FC = () => {
                   <SearchableSelect
                     size="sm"
                     options={[
-                      { value: 'ALL', label: 'All Branches' },
-                      ...branches.map((b) => ({
+                      ...(canViewAll ? [{ value: 'ALL', label: 'All Branches' }] : []),
+                      ...allowedBranches.map((b) => ({
                         value: b.branch_id,
-                        label: b.branch_name,
-                        badge: b.branch_code,
+                        label: b.branch_code,
+                        sublabel: b.branch_name.replace(/^Asopalav\s*-\s*/i, ''),
                       })),
                     ]}
                     value={staffBranchFilter}

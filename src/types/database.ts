@@ -187,6 +187,15 @@ export interface FloatAllocation {
   created_at: string;
 }
 
+export interface VendorSplitItem {
+  vendor_name: string;
+  category_name: string;
+  department_name: string;
+  bill_number?: string | null;
+  description?: string | null;
+  amount: number;
+}
+
 export interface ExpenseVoucher {
   id: string;
   voucher_number: string; // 'ASI-2026-00001'
@@ -202,6 +211,9 @@ export interface ExpenseVoucher {
   department_name?: string | null;
   department_code?: string | null;
   courier_partner_name?: string | null;
+  requested_by_staff_code?: string | null;
+  requested_by_staff_name?: string | null;
+  vendor_splits?: VendorSplitItem[] | null;
   remarks: string;
   bill_number?: string | null;
   bill_photo_urls: string[];

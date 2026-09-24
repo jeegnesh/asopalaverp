@@ -760,8 +760,8 @@ export const BulkMasterDataImportModal: React.FC = () => {
                   size="sm"
                   options={branches.map((b) => ({
                     value: b.branch_id,
-                    label: b.branch_name,
-                    badge: b.branch_code,
+                    label: b.branch_code,
+                    sublabel: b.branch_name.replace(/^Asopalav\s*-\s*/i, ''),
                   }))}
                   value={targetBranch}
                   onChange={setTargetBranch}
@@ -985,7 +985,7 @@ export const BulkMasterDataImportModal: React.FC = () => {
 
       {/* Discard Confirmation Modal Overlay */}
       {showDiscardConfirm && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in font-sans">
+        <div className="fixed inset-0 z-50 bg-black/60 dark:bg-black/75 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in font-sans">
           <div className="w-full max-w-md bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#262626] rounded-[8px] p-5 shadow-2xl space-y-4">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">

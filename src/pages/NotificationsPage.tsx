@@ -287,8 +287,8 @@ export const NotificationsPage: React.FC = () => {
                   { value: 'ALL', label: 'All Branches' },
                   ...branches.map((b) => ({
                     value: b.branch_id,
-                    label: b.branch_name,
-                    badge: b.branch_code,
+                    label: b.branch_code,
+                    sublabel: b.branch_name.replace(/^Asopalav\s*-\s*/i, ''),
                   })),
                 ]}
                 value={branchFilter}

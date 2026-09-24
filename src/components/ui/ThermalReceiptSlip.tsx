@@ -70,6 +70,7 @@ export const ThermalReceiptSlip: React.FC<ThermalReceiptSlipProps> = ({
       { label: 'Paid To:', value: voucher?.recipient_name || 'Vendor', isBold: true },
       { label: 'Category:', value: voucher?.category_name || 'General' },
       { label: 'Department:', value: voucher?.department_name || 'Showroom' },
+      ...(voucher?.requested_by_staff_name ? [{ label: 'Requested By:', value: `${voucher.requested_by_staff_name}${voucher.requested_by_staff_code ? ` (${voucher.requested_by_staff_code})` : ''}` }] : []),
       ...(voucher?.bill_number ? [{ label: 'Bill / Memo #:', value: voucher.bill_number }] : []),
     ],
     doubleEntry: {

@@ -125,26 +125,25 @@ export const App: React.FC = () => {
 
   useHotkeys();
 
-  // Branch boundary guard: Ensure cashiers never see unauthorized branch data
+  // Branch boundary guard: Ensure single-branch users never see unauthorized branch data
   useEffect(() => {
     if (!isAuthenticated || !user) return;
-    if (user.role_code === 'Cashier' && branches.length > 0) {
+    const isSuper = user.role_code === 'Super_Admin' || user.role_code === 'Developer';
+    if (!isSuper && branches.length > 0) {
       const allowed = getAllowedBranches(branches);
       const isCurrentAllowed = allowed.some(
         (b) => b.branch_id === selectedBranchId || b.branch_code === selectedBranchId
       );
-      if (!isCurrentAllowed && selectedBranchId !== allowed[0]?.branch_id) {
-        if (allowed.length > 0) {
-          showToast({
-            type: 'error',
-            title: 'Branch Access Restricted',
-            message: 'You are only authorized to access your assigned showroom terminal.',
-          });
-          setSelectedBranchId(allowed[0].branch_id);
-        }
+      if (!isCurrentAllowed && allowed.length > 0 && selectedBranchId !== allowed[0].branch_id) {
+        showToast({
+          type: 'warning',
+          title: 'Branch Access Restricted',
+          message: `You are authorized for ${allowed[0].branch_name}.`,
+        });
+        setSelectedBranchId(allowed[0].branch_id);
       }
     }
-  }, [isAuthenticated, user?.role_code, selectedBranchId, branches]);
+  }, [isAuthenticated, user, selectedBranchId, branches]);
 
   // Route security guard: Redirect cashiers away from restricted pages
   useEffect(() => {
@@ -424,7 +423,7 @@ export const App: React.FC = () => {
           {/* Workspace Canvas Area with Suspense Fallback */}
           <main
             ref={mainRef}
-            className="flex-1 overflow-y-auto bg-white dark:bg-[#141414] focus:outline-none transition-all duration-200 ease-out flex flex-col p-0"
+            className="flex-1 overflow-y-auto bg-white dark:bg-[#141414] focus:outline-none transition-all duration-200 ease-out flex flex-col p-0 pb-20 lg:pb-0"
           >
             <PageTransition pageKey={activePage}>
               <AppErrorBoundary>

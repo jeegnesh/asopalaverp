@@ -53,7 +53,6 @@ export const MobileBottomNav: React.FC = () => {
     icon: React.FC<{ className?: string }>;
     badge?: number;
     isProfile?: boolean;
-    isPrimaryAction?: boolean;
   }> = [
     {
       id: 'dashboard',
@@ -69,7 +68,6 @@ export const MobileBottomNav: React.FC = () => {
       id: 'new-voucher',
       label: 'Add Expense',
       icon: Plus,
-      isPrimaryAction: true,
     },
     isCashier
       ? {
@@ -93,19 +91,19 @@ export const MobileBottomNav: React.FC = () => {
   return (
     <>
       {/* ========================================================================= */}
-      {/* 1. WHATSAPP / SUPABASE STYLE 5-TAB BOTTOM NAVIGATION BAR (Docked & Solid) */}
+      {/* 1. MINIMALIST ICON-ONLY BOTTOM NAVIGATION DOCK BAR                        */}
       {/* ========================================================================= */}
       <nav
         aria-label="Mobile Navigation"
         className={cn(
           'lg:hidden fixed bottom-0 left-0 right-0 z-40 select-none touch-manipulation',
-          'bg-white/95 dark:bg-[#141414]/95 backdrop-blur-2xl',
-          'border-t border-slate-200/90 dark:border-[#262626]',
+          'bg-white/95 dark:bg-[#141414]/95 backdrop-blur-xl',
+          'border-t border-slate-200/90 dark:border-[#222222]',
           'shadow-[0_-4px_20px_rgba(0,0,0,0.06)] dark:shadow-[0_-8px_30px_rgba(0,0,0,0.4)]',
           'pb-safe'
         )}
       >
-        <div className="h-[60px] px-1 flex items-center justify-around max-w-lg mx-auto">
+        <div className="h-[52px] px-3 flex items-center justify-around max-w-lg mx-auto">
           {tabs.map((tab) => {
             const isActive = activePage === tab.id;
             const Icon = tab.icon;
@@ -115,65 +113,58 @@ export const MobileBottomNav: React.FC = () => {
                 key={tab.id}
                 type="button"
                 onClick={() => handleNavClick(tab.id)}
-                className="flex flex-col items-center justify-center flex-1 h-full py-0.5 group select-none cursor-pointer active:scale-95 transition-transform"
+                aria-label={tab.label}
+                className="flex items-center justify-center flex-1 h-full py-1 group select-none cursor-pointer active:scale-90 transition-transform"
               >
-                {/* Material 3 Capsule Pill Active Indicator */}
+                {/* Clean Centered Icon / Avatar Container */}
                 <div
                   className={cn(
-                    'relative h-7 px-3.5 rounded-full flex items-center justify-center transition-all duration-200',
-                    isActive
-                      ? tab.isPrimaryAction
-                        ? 'bg-[#3ecf8e] text-[#171717] shadow-xs'
-                        : 'bg-emerald-500/15 dark:bg-[#3ecf8e]/20 text-emerald-800 dark:text-[#3ecf8e]'
-                      : 'text-slate-500 dark:text-zinc-400 group-hover:text-slate-800 dark:group-hover:text-zinc-200'
+                    'relative w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200',
+                    isActive && !tab.isProfile
+                      ? 'bg-emerald-500/15 dark:bg-[#3ecf8e]/15 text-emerald-600 dark:text-[#3ecf8e]'
+                      : 'text-slate-400 dark:text-zinc-500 group-hover:text-slate-700 dark:group-hover:text-zinc-300'
                   )}
                 >
                   {tab.isProfile ? (
-                    <div
-                      className={cn(
-                        'w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-mono font-bold shrink-0 transition-colors',
-                        isActive
-                          ? 'bg-[#3ecf8e] text-[#171717] shadow-2xs'
-                          : 'bg-slate-200 dark:bg-[#2c2c2c] text-slate-700 dark:text-zinc-300'
-                      )}
-                    >
-                      {userInitials}
-                    </div>
-                  ) : tab.isPrimaryAction ? (
-                    <Icon
-                      className={cn(
-                        'w-5 h-5 transition-all',
-                        isActive
-                          ? 'text-[#171717] stroke-[3]'
-                          : 'text-slate-500 dark:text-zinc-400 group-hover:text-slate-800 dark:group-hover:text-zinc-200 stroke-[2]'
-                      )}
-                    />
+                    user?.avatar_url ? (
+                      <img
+                        src={user.avatar_url}
+                        alt="Profile"
+                        className={cn(
+                          'w-5.5 h-5.5 rounded-full object-cover shrink-0 transition-all duration-200',
+                          isActive
+                            ? 'ring-[1.5px] ring-[#3ecf8e] ring-offset-1 ring-offset-white dark:ring-offset-[#141414] shadow-xs'
+                            : 'ring-1 ring-slate-300/80 dark:ring-[#333333]'
+                        )}
+                      />
+                    ) : (
+                      <div
+                        className={cn(
+                          'w-5.5 h-5.5 rounded-full flex items-center justify-center text-[10px] font-mono font-bold shrink-0 transition-all duration-200',
+                          isActive
+                            ? 'bg-[#3ecf8e] text-[#171717] ring-[1.5px] ring-[#3ecf8e] ring-offset-1 ring-offset-white dark:ring-offset-[#141414] shadow-xs'
+                            : 'bg-slate-200 dark:bg-[#282828] text-slate-700 dark:text-zinc-300 ring-1 ring-slate-300/80 dark:ring-[#333333]'
+                        )}
+                      >
+                        {userInitials}
+                      </div>
+                    )
                   ) : (
                     <Icon
                       className={cn(
-                        'w-5 h-5 transition-all',
-                        isActive ? 'text-emerald-800 dark:text-[#3ecf8e] stroke-[2.4]' : 'stroke-[1.8]'
+                        'w-5 h-5 transition-all duration-150',
+                        isActive
+                          ? 'text-emerald-600 dark:text-[#3ecf8e] stroke-[2.4]'
+                          : 'stroke-[1.8]'
                       )}
                     />
                   )}
                   {tab.badge && tab.badge > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-emerald-600 dark:bg-[#3ecf8e] text-white dark:text-[#141414] text-[9px] font-mono font-bold flex items-center justify-center shadow-xs">
+                    <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-1 rounded-full bg-emerald-600 dark:bg-[#3ecf8e] text-white dark:text-[#141414] text-[9px] font-mono font-bold flex items-center justify-center shadow-xs">
                       {tab.badge > 9 ? '9+' : tab.badge}
                     </span>
                   )}
                 </div>
-
-                {/* Label below capsule */}
-                <span
-                  className={cn(
-                    'text-[10.5px] font-sans tracking-tight mt-0.5 transition-colors leading-none',
-                    isActive
-                      ? 'font-semibold text-emerald-800 dark:text-[#3ecf8e]'
-                      : 'font-medium text-slate-500 dark:text-zinc-400'
-                  )}
-                >
-                  {tab.label}
-                </span>
               </button>
             );
           })}
@@ -192,7 +183,7 @@ export const MobileBottomNav: React.FC = () => {
         >
           {/* Backdrop */}
           <div
-            className="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-xs animate-in fade-in duration-150"
+            className="fixed inset-0 bg-black/60 dark:bg-black/75 backdrop-blur-md animate-in fade-in duration-150"
             onClick={() => setIsQuickActionOpen(false)}
           />
 

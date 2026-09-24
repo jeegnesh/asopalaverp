@@ -7,6 +7,7 @@ import { useVouchers } from '@/hooks/useVouchers';
 import { erpService } from '@/lib/erpService';
 import { VoucherMode } from '@/components/vouchers/VoucherModeCards';
 import { StaffSplitTable, SplitItem } from '@/components/vouchers/StaffSplitTable';
+import { VendorSplitTable } from '@/components/vouchers/VendorSplitTable';
 import { BillUploader } from '@/components/vouchers/BillUploader';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { DatePicker } from '@/components/ui/DatePicker';
@@ -15,6 +16,7 @@ import { cn, formatINR, numberToWordsINR, printThermalVoucherSlip, triggerHaptic
 import { format } from 'date-fns';
 import { animateErrorBanner } from '@/lib/animations';
 import { showToast } from '@/components/ui/ToastContainer';
+import { VendorSplitItem } from '@/types/database';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -41,6 +43,7 @@ import {
   X,
   CreditCard,
   Banknote,
+  UserCheck,
 } from 'lucide-react';
 
 // Fast Amount Increment Chips
@@ -50,15 +53,19 @@ interface VoucherDraft {
   id: string;
   label: string;
   mode: VoucherMode;
+  isMultiVendor?: boolean;
   selectedBranch: string;
   paymentDate: string;
   voucherDigits: string;
   categoryName: string;
   departmentName: string;
   recipientName: string;
+  requestedByStaffCode?: string;
+  requestedByStaffName?: string;
   billNumber: string;
   amount: number | '';
   splits: SplitItem[];
+  vendorSplits?: VendorSplitItem[];
   courierCompany: string;
   trackingNumber: string;
   paymentMethod: 'Physical_Cash' | 'Online_UPI';
@@ -69,17 +76,19 @@ interface VoucherDraft {
 
 export const NewVoucherPage: React.FC = () => {
   const { setActivePage } = useUIStore();
-  const { user } = useAuthStore();
+  const { user, getAllowedBranches, isBranchAllowed } = useAuthStore();
   const { branches, selectedBranchId, setSelectedBranchId, getActiveBranch } = useBranchStore();
   const { categories, departments, couriers, staff, refresh } = useVouchers();
 
+  const allowedBranches = getAllowedBranches(branches);
   const activeBranch = getActiveBranch();
+  const initialBranch = (selectedBranchId && selectedBranchId !== 'ALL' && isBranchAllowed(selectedBranchId))
+    ? selectedBranchId
+    : (allowedBranches[0]?.branch_id || activeBranch.branch_id || 'Aellp-ASI');
 
   // Mode Selection: Shop_Vendor (Default), Staff_Split, Courier
   const [mode, setMode] = useState<VoucherMode>('Shop_Vendor');
-  const [selectedBranch, setSelectedBranch] = useState(
-    selectedBranchId && selectedBranchId !== 'ALL' ? selectedBranchId : activeBranch.branch_id || 'Aellp-ASI'
-  );
+  const [selectedBranch, setSelectedBranch] = useState(initialBranch);
   const [paymentDate, setPaymentDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [voucherDigits, setVoucherDigits] = useState<string>('');
   const [cashBalance, setCashBalance] = useState<number>(0);
@@ -88,19 +97,19 @@ export const NewVoucherPage: React.FC = () => {
 
   // Sync selected branch when store changes
   useEffect(() => {
-    if (selectedBranchId && selectedBranchId !== 'ALL') {
+    if (selectedBranchId && selectedBranchId !== 'ALL' && isBranchAllowed(selectedBranchId)) {
       setSelectedBranch(selectedBranchId);
     }
   }, [selectedBranchId]);
 
   const targetCode = normalizeBranchCode(selectedBranch);
-  const branchList = branches && branches.length > 0 ? branches : DEFAULT_BRANCHES;
+  const branchList = allowedBranches && allowedBranches.length > 0 ? allowedBranches : DEFAULT_BRANCHES;
   const currBranch = branchList.find(
     (b) =>
       b.branch_id === selectedBranch ||
       normalizeBranchCode(b.branch_id) === targetCode ||
       normalizeBranchCode(b.branch_code) === targetCode
-  ) || DEFAULT_BRANCHES[0];
+  ) || branchList[0] || DEFAULT_BRANCHES[0];
 
   // Scroll to top on mount
   useEffect(() => {
@@ -161,13 +170,30 @@ export const NewVoucherPage: React.FC = () => {
   const [billNumber, setBillNumber] = useState<string>('');
   const [amount, setAmount] = useState<number | ''>('');
 
+  // Staff Requester State (Who initiated / ordered this expense?)
+  const [requestedByStaffCode, setRequestedByStaffCode] = useState<string>('');
+  const [requestedByStaffName, setRequestedByStaffName] = useState<string>('');
+
+  // Multi-Vendor / Item Breakdown Mode State
+  const [isMultiVendor, setIsMultiVendor] = useState<boolean>(false);
+  const [vendorSplits, setVendorSplits] = useState<VendorSplitItem[]>([
+    {
+      vendor_name: '',
+      category_name: '',
+      department_name: '',
+      bill_number: '',
+      description: '',
+      amount: 0,
+    },
+  ]);
+
   // Staff Split Multi-Mode State
   const [splits, setSplits] = useState<SplitItem[]>([
     {
       staffCode: '',
       staffName: '',
-      departmentName: departments[0]?.department_name || '',
-      categoryName: categories[0]?.category_name || '',
+      departmentName: '',
+      categoryName: '',
       amount: 0,
     },
   ]);
@@ -177,7 +203,7 @@ export const NewVoucherPage: React.FC = () => {
   const [trackingNumber, setTrackingNumber] = useState<string>('');
 
   // Payment & Remarks State
-  const [paymentMethod, setPaymentMethod] = useState<'Physical_Cash' | 'Online_UPI'>('Physical_Cash');
+  const [paymentMethod, setPaymentMethod] = useState<'Physical_Cash' | 'Online_UPI'>('Online_UPI');
   const [remarks, setRemarks] = useState<string>('');
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
 
@@ -208,26 +234,39 @@ export const NewVoucherPage: React.FC = () => {
         id: 'draft-1',
         label: 'Draft #1',
         mode: 'Shop_Vendor',
+        isMultiVendor: false,
         selectedBranch: selectedBranchId && selectedBranchId !== 'ALL' ? selectedBranchId : activeBranch.branch_id || 'Aellp-ASI',
         paymentDate: format(new Date(), 'yyyy-MM-dd'),
         voucherDigits: '',
         categoryName: '',
         departmentName: '',
         recipientName: '',
+        requestedByStaffCode: '',
+        requestedByStaffName: '',
         billNumber: '',
         amount: '',
         splits: [
           {
             staffCode: '',
             staffName: '',
-            departmentName: departments[0]?.department_name || '',
-            categoryName: categories[0]?.category_name || '',
+            departmentName: '',
+            categoryName: '',
+            amount: 0,
+          },
+        ],
+        vendorSplits: [
+          {
+            vendor_name: '',
+            category_name: '',
+            department_name: '',
+            bill_number: '',
+            description: '',
             amount: 0,
           },
         ],
         courierCompany: '',
         trackingNumber: '',
-        paymentMethod: 'Physical_Cash',
+        paymentMethod: 'Online_UPI',
         remarks: '',
         photoUrls: [],
         updatedAt: Date.now(),
@@ -249,15 +288,19 @@ export const NewVoucherPage: React.FC = () => {
           return {
             ...d,
             mode,
+            isMultiVendor,
             selectedBranch,
             paymentDate,
             voucherDigits,
             categoryName,
             departmentName,
             recipientName,
+            requestedByStaffCode,
+            requestedByStaffName,
             billNumber,
             amount,
             splits,
+            vendorSplits,
             courierCompany,
             trackingNumber,
             paymentMethod,
@@ -276,15 +319,19 @@ export const NewVoucherPage: React.FC = () => {
   }, [
     activeDraftId,
     mode,
+    isMultiVendor,
     selectedBranch,
     paymentDate,
     voucherDigits,
     categoryName,
     departmentName,
     recipientName,
+    requestedByStaffCode,
+    requestedByStaffName,
     billNumber,
     amount,
     splits,
+    vendorSplits,
     courierCompany,
     trackingNumber,
     paymentMethod,
@@ -299,12 +346,15 @@ export const NewVoucherPage: React.FC = () => {
     const target = drafts.find((d) => d.id === targetId);
     if (target) {
       setMode(target.mode);
+      setIsMultiVendor(Boolean(target.isMultiVendor));
       setSelectedBranch(target.selectedBranch || activeBranch.branch_id || 'Aellp-ASI');
       setPaymentDate(target.paymentDate || format(new Date(), 'yyyy-MM-dd'));
       setVoucherDigits(target.voucherDigits || '');
       setCategoryName(target.categoryName || '');
       setDepartmentName(target.departmentName || '');
       setRecipientName(target.recipientName || '');
+      setRequestedByStaffCode(target.requestedByStaffCode || '');
+      setRequestedByStaffName(target.requestedByStaffName || '');
       setBillNumber(target.billNumber || '');
       setAmount(target.amount ?? '');
       setSplits(
@@ -314,8 +364,22 @@ export const NewVoucherPage: React.FC = () => {
               {
                 staffCode: '',
                 staffName: '',
-                departmentName: departments[0]?.department_name || '',
-                categoryName: categories[0]?.category_name || '',
+                departmentName: '',
+                categoryName: '',
+                amount: 0,
+              },
+            ]
+      );
+      setVendorSplits(
+        target.vendorSplits && target.vendorSplits.length > 0
+          ? target.vendorSplits
+          : [
+              {
+                vendor_name: '',
+                category_name: '',
+                department_name: '',
+                bill_number: '',
+                description: '',
                 amount: 0,
               },
             ]
@@ -337,11 +401,12 @@ export const NewVoucherPage: React.FC = () => {
       id: newId,
       label: `Draft #${drafts.length + 1}`,
       mode: 'Shop_Vendor',
+      isMultiVendor: false,
       selectedBranch: selectedBranchId && selectedBranchId !== 'ALL' ? selectedBranchId : activeBranch.branch_id || 'Aellp-ASI',
       paymentDate: format(new Date(), 'yyyy-MM-dd'),
       voucherDigits: '',
-      categoryName: categories[0]?.category_name || '',
-      departmentName: departments[0]?.department_name || '',
+      categoryName: '',
+      departmentName: '',
       recipientName: '',
       billNumber: '',
       amount: '',
@@ -349,14 +414,24 @@ export const NewVoucherPage: React.FC = () => {
         {
           staffCode: '',
           staffName: '',
-          departmentName: departments[0]?.department_name || '',
-          categoryName: categories[0]?.category_name || '',
+          departmentName: '',
+          categoryName: '',
+          amount: 0,
+        },
+      ],
+      vendorSplits: [
+        {
+          vendor_name: '',
+          category_name: '',
+          department_name: '',
+          bill_number: '',
+          description: '',
           amount: 0,
         },
       ],
       courierCompany: '',
       trackingNumber: '',
-      paymentMethod: 'Physical_Cash',
+      paymentMethod: 'Online_UPI',
       remarks: '',
       photoUrls: [],
       updatedAt: Date.now(),
@@ -382,7 +457,7 @@ export const NewVoucherPage: React.FC = () => {
     setSplits(newDraft.splits);
     setCourierCompany('');
     setTrackingNumber('');
-    setPaymentMethod('Physical_Cash');
+    setPaymentMethod('Online_UPI');
     setRemarks('');
     setPhotoUrls([]);
     setError(null);
@@ -455,27 +530,6 @@ export const NewVoucherPage: React.FC = () => {
     }
   }, [error]);
 
-  // Auto-set sensible defaults when categories / departments load
-  useEffect(() => {
-    if (!categoryName && categories.length > 0) {
-      if (mode === 'Courier') {
-        const courierCat = categories.find((c) => c.category_name.toLowerCase().includes('courier'));
-        setCategoryName(courierCat ? courierCat.category_name : categories[0].category_name);
-      } else if (mode === 'Staff_Split') {
-        const staffCat = categories.find((c) => c.category_name.toLowerCase().includes('staff') || c.category_name.toLowerCase().includes('tea'));
-        setCategoryName(staffCat ? staffCat.category_name : categories[0].category_name);
-      } else {
-        setCategoryName(categories[0].category_name);
-      }
-    }
-  }, [categories, mode]);
-
-  useEffect(() => {
-    if (!departmentName && departments.length > 0) {
-      setDepartmentName(departments[0].department_name);
-    }
-  }, [departments]);
-
   // Keyboard Shortcuts Listener for Counter Ergonomics (F2: Disburse, F6: Float, Alt+1/2/3: Mode, ESC: Reset)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -522,8 +576,11 @@ export const NewVoucherPage: React.FC = () => {
     if (mode === 'Staff_Split') {
       return splits.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
     }
+    if (mode === 'Shop_Vendor' && isMultiVendor) {
+      return vendorSplits.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+    }
     return Number(amount) || 0;
-  }, [mode, amount, splits]);
+  }, [mode, isMultiVendor, amount, splits, vendorSplits]);
 
   // Section 40A(3) Compliance Check
   const sec40A3Check = useMemo(() => {
@@ -554,7 +611,22 @@ export const NewVoucherPage: React.FC = () => {
 
   const handleResetForm = () => {
     setAmount('');
+    setCategoryName('');
+    setDepartmentName('');
     setRecipientName('');
+    setRequestedByStaffCode('');
+    setRequestedByStaffName('');
+    setIsMultiVendor(false);
+    setVendorSplits([
+      {
+        vendor_name: '',
+        category_name: '',
+        department_name: '',
+        bill_number: '',
+        description: '',
+        amount: 0,
+      },
+    ]);
     setBillNumber('');
     setRemarks('');
     setPhotoUrls([]);
@@ -564,8 +636,8 @@ export const NewVoucherPage: React.FC = () => {
       {
         staffCode: '',
         staffName: '',
-        departmentName: departments[0]?.department_name || '',
-        categoryName: categories[0]?.category_name || '',
+        departmentName: '',
+        categoryName: '',
         amount: 0,
       },
     ]);
@@ -640,27 +712,53 @@ export const NewVoucherPage: React.FC = () => {
 
     // 4. Mode-Specific Validations
     if (mode === 'Shop_Vendor') {
-      if (!categoryName) {
-        const msg = 'Please select or enter an expense category.';
-        setError(msg);
-        showToast({
-          type: 'error',
-          title: 'Category Required',
-          message: msg,
-        });
-        triggerHaptic('error');
-        return;
-      }
-      if (!recipientName.trim()) {
-        const msg = 'Please enter the recipient / vendor payee name.';
-        setError(msg);
-        showToast({
-          type: 'error',
-          title: 'Payee Required',
-          message: msg,
-        });
-        triggerHaptic('error');
-        return;
+      if (isMultiVendor) {
+        if (vendorSplits.length === 0) {
+          const msg = 'Please add at least one vendor / item line to the multi-vendor table.';
+          setError(msg);
+          showToast({
+            type: 'error',
+            title: 'Vendor Line Required',
+            message: msg,
+          });
+          triggerHaptic('error');
+          return;
+        }
+        const invalidItem = vendorSplits.find((v) => !v.vendor_name.trim() || Number(v.amount) <= 0);
+        if (invalidItem) {
+          const msg = 'All vendor line items must have a vendor/shop name and an amount > ₹0.';
+          setError(msg);
+          showToast({
+            type: 'error',
+            title: 'Invalid Vendor Item',
+            message: msg,
+          });
+          triggerHaptic('error');
+          return;
+        }
+      } else {
+        if (!categoryName) {
+          const msg = 'Please select or enter an expense category.';
+          setError(msg);
+          showToast({
+            type: 'error',
+            title: 'Category Required',
+            message: msg,
+          });
+          triggerHaptic('error');
+          return;
+        }
+        if (!recipientName.trim()) {
+          const msg = 'Please enter the recipient / vendor payee name.';
+          setError(msg);
+          showToast({
+            type: 'error',
+            title: 'Payee Required',
+            message: msg,
+          });
+          triggerHaptic('error');
+          return;
+        }
       }
     } else if (mode === 'Courier') {
       if (!courierCompany.trim()) {
@@ -744,12 +842,21 @@ export const NewVoucherPage: React.FC = () => {
         bill_photo_urls: photoUrls,
         created_by_name: `${user?.first_name || 'Cashier'} ${user?.last_name || ''}`.trim(),
         status: 'Approved',
+        requested_by_staff_code: requestedByStaffCode.trim() || undefined,
+        requested_by_staff_name: requestedByStaffName.trim() || undefined,
       };
 
       if (mode === 'Shop_Vendor') {
-        payload.category_name = categoryName || 'General Expense';
-        payload.department_name = departmentName || 'Main Shop Floor';
-        payload.recipient_name = recipientName;
+        if (isMultiVendor) {
+          payload.category_name = vendorSplits[0]?.category_name || categoryName || 'Multiple Expenses';
+          payload.department_name = vendorSplits[0]?.department_name || departmentName || 'Main Shop Floor';
+          payload.recipient_name = `${vendorSplits.length} Vendors (${vendorSplits.map((v) => v.vendor_name.split(' ')[0]).join(', ')})`;
+          payload.vendor_splits = vendorSplits;
+        } else {
+          payload.category_name = categoryName || 'General Expense';
+          payload.department_name = departmentName || 'Main Shop Floor';
+          payload.recipient_name = recipientName;
+        }
       } else if (mode === 'Courier') {
         payload.category_name = categoryName || 'Customer Courier & Packing';
         payload.department_name = departmentName || 'Logistics & Dispatch';
@@ -1094,342 +1201,428 @@ export const NewVoucherPage: React.FC = () => {
           </div>
         )}
 
-        {/* Main Full-Width Responsive Form Body */}
-        <form ref={formRef} onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-          {/* ========================================================================= */}
-          {/* LEFT COLUMN: VOUCHER CONFIGURATION, DETAILS, & ATTACHMENTS (7/8 cols)    */}
-          {/* ========================================================================= */}
-          <div className="lg:col-span-7 xl:col-span-8 space-y-4">
-            {/* 1. WHO IS THIS PAYMENT FOR? (Mode Selection Cards) */}
-            <div className="p-4 sm:p-5 rounded-[12px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#262626] shadow-xs space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-800 dark:text-[#EDEDED] font-sans">
-                  1. Who is this payment for?
-                </span>
-                <span className="text-[11px] text-slate-400 dark:text-zinc-500 font-sans">
-                  Choose one option:
-                </span>
-              </div>
+        {/* Main Full-Width Single-Page Responsive Form Body */}
+        <form ref={formRef} onSubmit={handleSubmit} className="w-full space-y-3.5">
+          {/* 1. COMPACT MODE SELECTION TABS (Shop Expense / Staff Expense / Courier) */}
+          <div className="flex items-center p-1 rounded-[10px] bg-slate-100 dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#282828] gap-1 shadow-xs">
+            <button
+              type="button"
+              onClick={() => {
+                triggerHaptic('selection');
+                setMode('Shop_Vendor');
+              }}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-[8px] text-xs font-semibold font-sans transition-all cursor-pointer select-none min-h-[38px]',
+                mode === 'Shop_Vendor'
+                  ? 'bg-white dark:bg-[#282828] text-blue-600 dark:text-blue-400 shadow-xs ring-1 ring-black/5 dark:ring-white/10'
+                  : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-[#222222]'
+              )}
+            >
+              <Store className="w-4 h-4 shrink-0 stroke-[2]" />
+              <span>Shop Expense</span>
+              <kbd className="hidden sm:inline text-[9px] font-mono opacity-60 font-normal">Alt+1</kbd>
+            </button>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {/* Option 1: Shop Expense */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    triggerHaptic('selection');
-                    setMode('Shop_Vendor');
+            <button
+              type="button"
+              onClick={() => {
+                triggerHaptic('selection');
+                setMode('Staff_Split');
+              }}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-[8px] text-xs font-semibold font-sans transition-all cursor-pointer select-none min-h-[38px]',
+                mode === 'Staff_Split'
+                  ? 'bg-white dark:bg-[#282828] text-emerald-600 dark:text-[#3ecf8e] shadow-xs ring-1 ring-black/5 dark:ring-white/10'
+                  : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-[#222222]'
+              )}
+            >
+              <Users className="w-4 h-4 shrink-0 stroke-[2]" />
+              <span>Staff Expense</span>
+              <kbd className="hidden sm:inline text-[9px] font-mono opacity-60 font-normal">Alt+2</kbd>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                triggerHaptic('selection');
+                setMode('Courier');
+              }}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-[8px] text-xs font-semibold font-sans transition-all cursor-pointer select-none min-h-[38px]',
+                mode === 'Courier'
+                  ? 'bg-white dark:bg-[#282828] text-amber-600 dark:text-amber-400 shadow-xs ring-1 ring-black/5 dark:ring-white/10'
+                  : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white hover:bg-white/50 dark:hover:bg-[#222222]'
+              )}
+            >
+              <Truck className="w-4 h-4 shrink-0 stroke-[2]" />
+              <span>Courier & Parcel</span>
+              <kbd className="hidden sm:inline text-[9px] font-mono opacity-60 font-normal">Alt+3</kbd>
+            </button>
+          </div>
+
+          {/* CARD 1: TRANSACTION & BASIC INFO (Showroom, Date, Voucher #, Amount, Payment Method) */}
+          <div className="p-3.5 sm:p-4 rounded-[12px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#262626] shadow-xs space-y-3.5">
+            {/* Top Sub-Row: Showroom, Date, Bill Number */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* Showroom / Branch */}
+              <div className="space-y-1 min-w-0">
+                <label className="block text-xs font-medium text-slate-700 dark:text-[#EDEDED]">
+                  Showroom / Branch *
+                </label>
+                <SearchableSelect
+                  value={selectedBranch}
+                  onChange={(val) => {
+                    setSelectedBranch(val);
+                    setSelectedBranchId(val);
                   }}
-                  className={cn(
-                    'p-3.5 sm:p-4 rounded-[10px] border text-left flex flex-col justify-between transition-all cursor-pointer shadow-xs select-none min-h-[105px]',
-                    mode === 'Shop_Vendor'
-                      ? 'bg-blue-50/70 dark:bg-blue-950/25 border-blue-500 dark:border-blue-400 ring-1 ring-blue-500/30'
-                      : 'bg-slate-50/40 dark:bg-[#141414] border-slate-200 dark:border-[#262626] hover:bg-slate-100/60 dark:hover:bg-[#1c1c1c]'
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2 w-full">
-                    <div
-                      className={cn(
-                        'w-8 h-8 rounded-[6px] flex items-center justify-center shrink-0 border transition-colors',
-                        mode === 'Shop_Vendor'
-                          ? 'bg-blue-500 text-white border-blue-600'
-                          : 'bg-white dark:bg-[#202020] text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-[#333]'
-                      )}
-                    >
-                      <Store className="w-4 h-4 stroke-[2.2]" />
-                    </div>
-
-                    {mode === 'Shop_Vendor' && (
-                      <div className="w-4 h-4 rounded-full bg-blue-500 text-white flex items-center justify-center shrink-0">
-                        <Check className="w-2.5 h-2.5 stroke-[3]" />
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="mt-2.5">
-                    <span className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white block leading-tight break-words">
-                      Shop Expense
-                    </span>
-                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1 leading-snug line-clamp-2">
-                      Repairs, tea &amp; snacks, bills, shop supplies
-                    </p>
-                  </div>
-                </button>
-
-                {/* Option 2: Staff Expense */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    triggerHaptic('selection');
-                    setMode('Staff_Split');
-                  }}
-                  className={cn(
-                    'p-3.5 sm:p-4 rounded-[10px] border text-left flex flex-col justify-between transition-all cursor-pointer shadow-xs select-none min-h-[105px]',
-                    mode === 'Staff_Split'
-                      ? 'bg-emerald-50/70 dark:bg-emerald-950/25 border-emerald-500 dark:border-[#3ecf8e] ring-1 ring-emerald-500/30'
-                      : 'bg-slate-50/40 dark:bg-[#141414] border-slate-200 dark:border-[#262626] hover:bg-slate-100/60 dark:hover:bg-[#1c1c1c]'
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2 w-full">
-                    <div
-                      className={cn(
-                        'w-8 h-8 rounded-[6px] flex items-center justify-center shrink-0 border transition-colors',
-                        mode === 'Staff_Split'
-                          ? 'bg-emerald-500 dark:bg-[#3ecf8e] text-[#171717] border-emerald-600'
-                          : 'bg-white dark:bg-[#202020] text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-[#333]'
-                      )}
-                    >
-                      <Users className="w-4 h-4 stroke-[2.2]" />
-                    </div>
-
-                    {mode === 'Staff_Split' && (
-                      <div className="w-4 h-4 rounded-full bg-emerald-600 dark:bg-[#3ecf8e] text-white dark:text-[#171717] flex items-center justify-center shrink-0">
-                        <Check className="w-2.5 h-2.5 stroke-[3]" />
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="mt-2.5">
-                    <span className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white block leading-tight break-words">
-                      Staff Expense
-                    </span>
-                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1 leading-snug line-clamp-2">
-                      Staff lunch, evening tea, shared meal bills
-                    </p>
-                  </div>
-                </button>
-
-                {/* Option 3: Courier & Parcel */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    triggerHaptic('selection');
-                    setMode('Courier');
-                  }}
-                  className={cn(
-                    'p-3.5 sm:p-4 rounded-[10px] border text-left flex flex-col justify-between transition-all cursor-pointer shadow-xs select-none min-h-[105px]',
-                    mode === 'Courier'
-                      ? 'bg-amber-50/70 dark:bg-amber-950/25 border-amber-500 dark:border-amber-400 ring-1 ring-amber-500/30'
-                      : 'bg-slate-50/40 dark:bg-[#141414] border-slate-200 dark:border-[#262626] hover:bg-slate-100/60 dark:hover:bg-[#1c1c1c]'
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2 w-full">
-                    <div
-                      className={cn(
-                        'w-8 h-8 rounded-[6px] flex items-center justify-center shrink-0 border transition-colors',
-                        mode === 'Courier'
-                          ? 'bg-amber-500 text-white border-amber-600'
-                          : 'bg-white dark:bg-[#202020] text-slate-600 dark:text-zinc-400 border-slate-200 dark:border-[#333]'
-                      )}
-                    >
-                      <Truck className="w-4 h-4 stroke-[2.2]" />
-                    </div>
-
-                    {mode === 'Courier' && (
-                      <div className="w-4 h-4 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0">
-                        <Check className="w-2.5 h-2.5 stroke-[3]" />
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="mt-2.5">
-                    <span className="text-xs sm:text-sm font-semibold text-slate-900 dark:text-white block leading-tight break-words">
-                      Courier &amp; Parcel
-                    </span>
-                    <p className="text-[11px] text-slate-500 dark:text-zinc-400 mt-1 leading-snug line-clamp-2">
-                      Saree parcel dispatch, DTDC, Maruti courier
-                    </p>
-                  </div>
-                </button>
-              </div>
-            </div>
-
-            {/* 2. SHOWROOM & DATE */}
-            <div className="p-4 sm:p-5 rounded-[12px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#262626] shadow-xs space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-800 dark:text-[#EDEDED] font-sans">
-                  2. Showroom &amp; Date
-                </span>
-                <span className="text-[11px] text-slate-400 dark:text-zinc-500 font-sans">
-                  Daily Record
-                </span>
+                  options={branchList.map((b) => ({
+                    value: b.branch_id,
+                    label: b.branch_name,
+                  }))}
+                  placeholder="Select branch..."
+                  allowCustom={false}
+                />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-                {/* Showroom / Branch */}
-                <div className="space-y-1 min-w-0">
-                  <label className="block text-xs font-medium text-slate-700 dark:text-[#EDEDED]">
-                    Showroom / Branch *
-                  </label>
-                  <SearchableSelect
-                    value={selectedBranch}
-                    onChange={(val) => {
-                      setSelectedBranch(val);
-                      setSelectedBranchId(val);
-                    }}
-                    options={branchList.map((b) => ({
-                      value: b.branch_id,
-                      label: b.branch_name,
-                      subLabel: b.branch_code,
-                      badge: b.branch_code,
-                    }))}
-                    placeholder="Select branch..."
-                    allowCustom={false}
-                  />
-                </div>
-
-                {/* Date of Payment */}
-                <div className="space-y-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-medium text-slate-700 dark:text-[#EDEDED]">
-                      Date of Payment *
-                    </label>
-                    {isBackdated && (
-                      <span
-                        className={cn(
-                          'text-[10px] font-mono flex items-center gap-1 font-medium',
-                          allowBackdated
-                            ? 'text-emerald-600 dark:text-[#3ecf8e]'
-                            : isBackdateRestricted
-                            ? 'text-amber-600 dark:text-amber-400'
-                            : 'text-slate-500 dark:text-zinc-400'
-                        )}
-                      >
-                        {allowBackdated ? (
-                          <>
-                            <Zap className="w-2.5 h-2.5 text-[#3ecf8e]" />
-                            <span>F12 Backdate Mode</span>
-                          </>
-                        ) : isBackdateRestricted ? (
-                          <>
-                            <ShieldAlert className="w-2.5 h-2.5 text-amber-500" />
-                            <span>Past Date (Needs F12)</span>
-                          </>
-                        ) : (
-                          <span>Past Date</span>
-                        )}
-                      </span>
-                    )}
-                  </div>
-                  <DatePicker
-                    value={paymentDate}
-                    onChange={setPaymentDate}
-                    placeholder="Select date..."
-                  />
-                  {isBackdateBlocked && (
-                    <p className="text-[11px] text-amber-600 dark:text-amber-400 font-sans leading-tight">
-                      ⚠️ Backdated entry is locked for cashiers. Enable emergency backdate switch in F12 to record older bills.
-                    </p>
-                  )}
-                </div>
-
-                {/* Voucher Number */}
-                <div className="space-y-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-medium text-slate-700 dark:text-[#EDEDED]">
-                      Bill / Receipt No. *
-                    </label>
-                    <span className="text-[10px] font-mono text-emerald-600 dark:text-[#3ecf8e]">
-                      Auto-Numbered
-                    </span>
-                  </div>
-                  <div className="relative flex items-center rounded-[6px] bg-slate-50/60 dark:bg-[#121212] border border-slate-200 dark:border-[#262626] focus-within:border-[#3ecf8e] focus-within:ring-1 focus-within:ring-[#3ecf8e]/30 overflow-hidden min-h-[38px] shadow-xs">
-                    <span className="px-2.5 py-2 bg-slate-100 dark:bg-[#1c1c1c] text-slate-600 dark:text-[#A1A1A1] font-mono font-medium text-xs select-none shrink-0 border-r border-slate-200 dark:border-[#262626]">
-                      {currBranch.branch_code}-
-                    </span>
-                    <input
-                      type="text"
-                      value={voucherDigits}
-                      onChange={(e) => setVoucherDigits(e.target.value.replace(/[^0-9a-zA-Z-]/g, ''))}
-                      placeholder="00001"
-                      className="w-full bg-transparent px-3 py-1.5 text-xs font-mono font-medium text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-zinc-600 focus:outline-none tabular-nums"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 3. DYNAMIC DETAILS SECTION (Shop / Staff / Courier) */}
-            {mode === 'Shop_Vendor' && (
-              <div className="p-4 sm:p-5 rounded-[12px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#262626] shadow-xs space-y-3.5">
+              {/* Date of Payment */}
+              <div className="space-y-1 min-w-0">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-slate-800 dark:text-[#EDEDED] font-sans">
-                    3. Expense Details
+                  <label className="block text-xs font-medium text-slate-700 dark:text-[#EDEDED]">
+                    Date of Payment *
+                  </label>
+                  {isBackdated && (
+                    <span
+                      className={cn(
+                        'text-[10px] font-mono flex items-center gap-1 font-medium',
+                        allowBackdated
+                          ? 'text-emerald-600 dark:text-[#3ecf8e]'
+                          : isBackdateRestricted
+                          ? 'text-amber-600 dark:text-amber-400'
+                          : 'text-slate-500 dark:text-zinc-400'
+                      )}
+                    >
+                      {allowBackdated ? (
+                        <>
+                          <Zap className="w-2.5 h-2.5 text-[#3ecf8e]" />
+                          <span>F12 Backdate Mode</span>
+                        </>
+                      ) : isBackdateRestricted ? (
+                        <>
+                          <ShieldAlert className="w-2.5 h-2.5 text-amber-500" />
+                          <span>Past Date</span>
+                        </>
+                      ) : (
+                        <span>Past Date</span>
+                      )}
+                    </span>
+                  )}
+                </div>
+                <DatePicker
+                  value={paymentDate}
+                  onChange={setPaymentDate}
+                  placeholder="Select date..."
+                />
+                {isBackdateBlocked && (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400 font-sans leading-tight">
+                    ⚠️ Backdated entry is locked for cashiers.
+                  </p>
+                )}
+              </div>
+
+              {/* Voucher Number */}
+              <div className="space-y-1 min-w-0">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-medium text-slate-700 dark:text-[#EDEDED]">
+                    Bill / Receipt No. *
+                  </label>
+                  <span className="text-[10px] font-mono text-emerald-600 dark:text-[#3ecf8e]">
+                    Auto
                   </span>
                 </div>
-
-                {/* Row 1: Category & Department */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                  <div className="space-y-1">
-                    <label className="block text-xs font-medium text-slate-700 dark:text-[#EDEDED]">
-                      Expense Category *
-                    </label>
-                    <SearchableSelect
-                      value={categoryName}
-                      onChange={setCategoryName}
-                      options={categories.map((c) => ({
-                        value: c.category_name,
-                        label: c.category_name,
-                      }))}
-                      placeholder="e.g. Tea & Snacks, Electricity, Repairs..."
-                      allowCustom={true}
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="block text-xs font-medium text-slate-700 dark:text-[#EDEDED]">
-                      Department *
-                    </label>
-                    <SearchableSelect
-                      value={departmentName}
-                      onChange={setDepartmentName}
-                      options={departments.map((d) => ({
-                        value: d.department_name,
-                        label: d.department_name,
-                        badge: d.department_code,
-                      }))}
-                      placeholder="e.g. Sales Counter, Housekeeping..."
-                      allowCustom={true}
-                    />
-                  </div>
-                </div>
-
-                {/* Row 2: Who was paid? */}
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-medium text-slate-700 dark:text-[#EDEDED]">
-                      Who was paid? (Shop or Person Name) *
-                    </label>
-                  </div>
+                <div className="relative flex items-center rounded-[6px] bg-slate-50/60 dark:bg-[#121212] border border-slate-200 dark:border-[#262626] focus-within:border-[#3ecf8e] focus-within:ring-1 focus-within:ring-[#3ecf8e]/30 overflow-hidden min-h-[38px] shadow-xs">
+                  <span className="px-2.5 py-2 bg-slate-100 dark:bg-[#1c1c1c] text-slate-600 dark:text-[#A1A1A1] font-mono font-medium text-xs select-none shrink-0 border-r border-slate-200 dark:border-[#262626]">
+                    {currBranch.branch_code}-
+                  </span>
                   <input
                     type="text"
-                    value={recipientName}
-                    onChange={(e) => setRecipientName(e.target.value)}
-                    placeholder="e.g. Ramesh Tea Stall, Sharma Electrician, Bharat Hardware"
-                    className="w-full rounded-[6px] border border-slate-200 dark:border-[#262626] bg-slate-50/50 dark:bg-[#121212] px-3.5 py-2 text-slate-900 dark:text-white text-xs font-sans placeholder:text-slate-400 dark:placeholder:text-zinc-600 focus:outline-none focus:border-[#3ecf8e] dark:focus:border-[#3ecf8e] focus:ring-1 focus:ring-[#3ecf8e]/30 min-h-[38px] shadow-xs"
+                    value={voucherDigits}
+                    onChange={(e) => setVoucherDigits(e.target.value.replace(/[^0-9a-zA-Z-]/g, ''))}
+                    placeholder="00001"
+                    className="w-full bg-transparent px-3 py-1.5 text-xs font-mono font-medium text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-zinc-600 focus:outline-none tabular-nums"
                   />
                 </div>
+              </div>
+            </div>
 
-                {/* Row 3: Optional Bill Number */}
-                <div className="space-y-1">
-                  <label className="block text-xs font-medium text-slate-700 dark:text-[#EDEDED]">
-                    Shop Bill / Receipt No. (Optional)
+            {/* Bottom Sub-Row: Amount (₹) + Paid From Till */}
+            <div className="pt-3 border-t border-slate-100 dark:border-[#222222] grid grid-cols-1 md:grid-cols-12 gap-3.5 items-start">
+              {/* Left 7 cols: Amount Input + Chips + Words */}
+              <div className="md:col-span-7 space-y-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-1.5">
+                  <label className="block text-xs font-medium text-slate-800 dark:text-[#EDEDED]">
+                    Expense Amount (₹) *
                   </label>
+
+                  {mode !== 'Staff_Split' && !(mode === 'Shop_Vendor' && isMultiVendor) && (
+                    <div className="flex items-center gap-1">
+                      {AMOUNT_INCREMENTS.map((inc) => (
+                        <button
+                          key={inc}
+                          type="button"
+                          onClick={() => handleAddAmount(inc)}
+                          className="px-2 py-0.5 rounded-[4px] bg-slate-100 dark:bg-[#202020] hover:bg-slate-200 dark:hover:bg-[#282828] active:bg-[#3ecf8e]/20 border border-slate-200 dark:border-[#2e2e2e] text-[10px] font-mono font-medium text-slate-700 dark:text-zinc-300 transition-all cursor-pointer shadow-2xs"
+                        >
+                          +₹{inc >= 1000 ? `${inc / 1000}k` : inc}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="relative flex items-center rounded-[8px] bg-slate-50/60 dark:bg-[#121212] border border-slate-200 dark:border-[#262626] focus-within:border-[#3ecf8e] focus-within:ring-1 focus-within:ring-[#3ecf8e]/30 shadow-xs overflow-hidden min-h-[44px]">
+                  <span className="pl-3.5 pr-1.5 text-lg font-mono text-slate-400 dark:text-zinc-500 font-medium select-none">
+                    ₹
+                  </span>
                   <input
-                    type="text"
-                    value={billNumber}
-                    onChange={(e) => setBillNumber(e.target.value)}
-                    placeholder="e.g. Bill #104 or Cash Slip"
-                    className="w-full rounded-[6px] border border-slate-200 dark:border-[#262626] bg-slate-50/50 dark:bg-[#121212] px-3.5 py-2 text-slate-900 dark:text-white text-xs font-mono placeholder:text-slate-400 dark:placeholder:text-zinc-600 focus:outline-none focus:border-[#3ecf8e] dark:focus:border-[#3ecf8e] focus:ring-1 focus:ring-[#3ecf8e]/30 min-h-[38px] shadow-xs"
+                    ref={amountInputRef}
+                    type="number"
+                    inputMode="decimal"
+                    min="1"
+                    step="any"
+                    disabled={mode === 'Staff_Split' || (mode === 'Shop_Vendor' && isMultiVendor)}
+                    value={mode === 'Staff_Split' || (mode === 'Shop_Vendor' && isMultiVendor) ? finalCalculatedAmount || '' : amount}
+                    onChange={(e) => setAmount(e.target.value === '' ? '' : parseFloat(e.target.value) || '')}
+                    placeholder="0.00"
+                    className="w-full bg-transparent pl-1 pr-3.5 py-2 text-lg font-mono font-semibold tabular-nums text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-zinc-600 focus:outline-none disabled:opacity-85 disabled:cursor-not-allowed"
                   />
                 </div>
+
+                {finalCalculatedAmount > 0 && (
+                  <div className="p-1.5 rounded-[6px] bg-slate-50 dark:bg-[#141414] border border-slate-200 dark:border-[#282828]">
+                    <span className="text-[11px] text-emerald-600 dark:text-[#3ecf8e] font-mono font-medium block truncate">
+                      {numberToWordsINR(finalCalculatedAmount)}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Right 5 cols: Paid From (Bank UPI vs Cash Box) */}
+              <div className="md:col-span-5 space-y-1.5">
+                <label className="block text-xs font-medium text-slate-800 dark:text-[#EDEDED]">
+                  Paid From (Payment Till) *
+                </label>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('selection');
+                      setPaymentMethod('Online_UPI');
+                    }}
+                    className={cn(
+                      'p-2.5 rounded-[8px] border text-left flex flex-col justify-between cursor-pointer transition-all shadow-xs min-h-[52px]',
+                      paymentMethod === 'Online_UPI'
+                        ? 'bg-sky-500/10 border-sky-400 text-slate-900 dark:text-white ring-1 ring-sky-400/30'
+                        : 'bg-slate-50/50 dark:bg-[#121212] border-slate-200 dark:border-[#262626] text-slate-700 dark:text-[#A1A1A1] hover:bg-slate-100/60 dark:hover:bg-[#1c1c1c]'
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium flex items-center gap-1.5">
+                        <CreditCard className="w-3.5 h-3.5 text-sky-500" />
+                        <span>Bank UPI</span>
+                      </span>
+                      {paymentMethod === 'Online_UPI' && <Check className="w-3.5 h-3.5 text-sky-400 stroke-[2.5]" />}
+                    </div>
+                    <span className="text-[10px] font-mono text-sky-500 dark:text-sky-400 tabular-nums font-semibold mt-0.5">
+                      UPI: {formatINR(upiBalance)}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('selection');
+                      setPaymentMethod('Physical_Cash');
+                    }}
+                    className={cn(
+                      'p-2.5 rounded-[8px] border text-left flex flex-col justify-between cursor-pointer transition-all shadow-xs min-h-[52px]',
+                      paymentMethod === 'Physical_Cash'
+                        ? 'bg-emerald-500/10 border-[#3ecf8e] text-slate-900 dark:text-white ring-1 ring-[#3ecf8e]/30'
+                        : 'bg-slate-50/50 dark:bg-[#121212] border-slate-200 dark:border-[#262626] text-slate-700 dark:text-[#A1A1A1] hover:bg-slate-100/60 dark:hover:bg-[#1c1c1c]'
+                    )}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium flex items-center gap-1.5">
+                        <Banknote className="w-3.5 h-3.5 text-emerald-600 dark:text-[#3ecf8e]" />
+                        <span>Cash Box</span>
+                      </span>
+                      {paymentMethod === 'Physical_Cash' && <Check className="w-3.5 h-3.5 text-[#3ecf8e] stroke-[2.5]" />}
+                    </div>
+                    <span className="text-[10px] font-mono text-emerald-600 dark:text-[#3ecf8e] tabular-nums font-semibold mt-0.5">
+                      Cash: {formatINR(cashBalance)}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* CARD 2: EXPENSE DETAILS & REMARKS */}
+          <div className="p-3.5 sm:p-4 rounded-[12px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#262626] shadow-xs space-y-3.5">
+            {/* Requested / Ordered By (Floor Staff Member) */}
+            <div className="space-y-1 min-w-0">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-medium text-slate-700 dark:text-[#EDEDED]">
+                  Requested / Ordered By (Floor Staff Member - Optional)
+                </label>
+                <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-sans">
+                  Who ordered this expense
+                </span>
+              </div>
+              <SearchableSelect
+                value={requestedByStaffCode}
+                onChange={(val) => {
+                  setRequestedByStaffCode(val);
+                  const found = staff.find((s) => s.staff_code === val);
+                  setRequestedByStaffName(found ? `${found.first_name} ${found.last_name || ''}`.trim() : val);
+                }}
+                options={staff.map((s) => ({
+                  value: s.staff_code,
+                  label: `${s.first_name} ${s.last_name || ''}`.trim(),
+                  subLabel: s.department_name || s.designation,
+                }))}
+                placeholder="Search staff who requested this (e.g. Salesperson, Floor Manager)..."
+                allowCustom={true}
+              />
+            </div>
+
+            {/* Mode-Specific Dynamic Inputs */}
+            {mode === 'Shop_Vendor' && (
+              <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-[#222222]">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-slate-800 dark:text-[#EDEDED] font-sans">
+                    Vendor &amp; Category Details
+                  </span>
+
+                  {/* Multi-Vendor / Single Vendor Mode Toggle */}
+                  <div className="flex items-center p-0.5 rounded-[6px] bg-slate-100 dark:bg-[#1e1e1e] border border-slate-200 dark:border-[#2e2e2e] self-start sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        triggerHaptic('selection');
+                        setIsMultiVendor(false);
+                      }}
+                      className={cn(
+                        'px-2.5 py-1 text-[11px] font-medium rounded-[4px] transition-all cursor-pointer select-none',
+                        !isMultiVendor
+                          ? 'bg-white dark:bg-[#282828] text-slate-900 dark:text-white shadow-2xs font-semibold'
+                          : 'text-slate-500 dark:text-[#888888] hover:text-slate-800 dark:hover:text-[#dddddd]'
+                      )}
+                    >
+                      Single Vendor Bill
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        triggerHaptic('selection');
+                        setIsMultiVendor(true);
+                      }}
+                      className={cn(
+                        'px-2.5 py-1 text-[11px] font-medium rounded-[4px] transition-all cursor-pointer select-none flex items-center gap-1',
+                        isMultiVendor
+                          ? 'bg-emerald-500/15 dark:bg-[#3ecf8e]/15 text-emerald-700 dark:text-[#3ecf8e] border border-emerald-500/30 dark:border-[#3ecf8e]/30 shadow-2xs font-semibold'
+                          : 'text-slate-500 dark:text-[#888888] hover:text-slate-800 dark:hover:text-[#dddddd]'
+                      )}
+                    >
+                      <span>Multi-Vendor Breakdown</span>
+                      <span className="px-1 py-0.2 rounded text-[9px] bg-[#3ecf8e] text-zinc-900 font-bold">New</span>
+                    </button>
+                  </div>
+                </div>
+
+                {!isMultiVendor ? (
+                  <>
+                    {/* Row 1: Who was paid & Bill Number */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="block text-xs font-medium text-slate-700 dark:text-[#EDEDED]">
+                          Who was paid? (Shop or Person Name) *
+                        </label>
+                        <input
+                          type="text"
+                          value={recipientName}
+                          onChange={(e) => setRecipientName(e.target.value)}
+                          placeholder="e.g. Ramesh Tea Stall, Sharma Electrician"
+                          className="w-full rounded-[6px] border border-slate-200 dark:border-[#262626] bg-slate-50/50 dark:bg-[#121212] px-3.5 py-2 text-slate-900 dark:text-white text-xs font-sans placeholder:text-slate-400 dark:placeholder:text-zinc-600 focus:outline-none focus:border-[#3ecf8e] dark:focus:border-[#3ecf8e] focus:ring-1 focus:ring-[#3ecf8e]/30 min-h-[38px] shadow-xs"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="block text-xs font-medium text-slate-700 dark:text-[#EDEDED]">
+                          Shop Bill / Receipt No. (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={billNumber}
+                          onChange={(e) => setBillNumber(e.target.value)}
+                          placeholder="e.g. Bill #104 or Cash Slip"
+                          className="w-full rounded-[6px] border border-slate-200 dark:border-[#262626] bg-slate-50/50 dark:bg-[#121212] px-3.5 py-2 text-slate-900 dark:text-white text-xs font-mono placeholder:text-slate-400 dark:placeholder:text-zinc-600 focus:outline-none focus:border-[#3ecf8e] dark:focus:border-[#3ecf8e] focus:ring-1 focus:ring-[#3ecf8e]/30 min-h-[38px] shadow-xs"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Row 2: Category & Department */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="block text-xs font-medium text-slate-700 dark:text-[#EDEDED]">
+                          Expense Category *
+                        </label>
+                        <SearchableSelect
+                          value={categoryName}
+                          onChange={setCategoryName}
+                          options={categories.map((c) => ({
+                            value: c.category_name,
+                            label: c.category_name,
+                          }))}
+                          placeholder="e.g. Tea & Snacks, Electricity, Repairs..."
+                          allowCustom={true}
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="block text-xs font-medium text-slate-700 dark:text-[#EDEDED]">
+                          Department *
+                        </label>
+                        <SearchableSelect
+                          value={departmentName}
+                          onChange={setDepartmentName}
+                          options={departments.map((d) => ({
+                            value: d.department_name,
+                            label: d.department_name,
+                          }))}
+                          placeholder="e.g. Sales Counter, Housekeeping..."
+                          allowCustom={true}
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <VendorSplitTable
+                    splits={vendorSplits}
+                    categories={categories}
+                    departments={departments}
+                    targetAmount={Number(amount) || undefined}
+                    onChange={setVendorSplits}
+                  />
+                )}
               </div>
             )}
 
             {mode === 'Staff_Split' && (
-              <div className="p-4 sm:p-5 rounded-[12px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#262626] shadow-xs space-y-3.5">
+              <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-[#222222]">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-slate-800 dark:text-[#EDEDED] font-sans">
-                    3. Staff Members List
+                    Staff Members Split
                   </span>
                 </div>
 
@@ -1445,15 +1638,15 @@ export const NewVoucherPage: React.FC = () => {
             )}
 
             {mode === 'Courier' && (
-              <div className="p-4 sm:p-5 rounded-[12px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#262626] shadow-xs space-y-3.5">
+              <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-[#222222]">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-semibold text-slate-800 dark:text-[#EDEDED] font-sans">
-                    3. Courier Delivery Details
+                    Courier Delivery Details
                   </span>
                 </div>
 
                 {/* Row 1: Courier Company & Tracking Number */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="block text-xs font-medium text-slate-700 dark:text-[#EDEDED]">
                       Courier Company *
@@ -1464,7 +1657,6 @@ export const NewVoucherPage: React.FC = () => {
                       options={couriers.map((c) => ({
                         value: c.partner_name,
                         label: c.partner_name,
-                        badge: c.partner_code,
                       }))}
                       placeholder="Select courier (Maruti, DTDC, Trackon)..."
                       allowCustom={true}
@@ -1486,7 +1678,7 @@ export const NewVoucherPage: React.FC = () => {
                 </div>
 
                 {/* Row 2: Category & Department */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="block text-xs font-medium text-slate-700 dark:text-[#EDEDED]">
                       Expense Category (Optional)
@@ -1513,7 +1705,6 @@ export const NewVoucherPage: React.FC = () => {
                       options={departments.map((d) => ({
                         value: d.department_name,
                         label: d.department_name,
-                        badge: d.department_code,
                       }))}
                       placeholder="Select department (optional)..."
                       allowCustom={true}
@@ -1523,251 +1714,130 @@ export const NewVoucherPage: React.FC = () => {
               </div>
             )}
 
-            {/* 4. REASON / REMARKS */}
-            <div className="p-4 sm:p-5 rounded-[12px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#262626] shadow-xs space-y-2">
+            {/* Notes / Remarks Integrated Directly in Card 2 */}
+            <div className="pt-2 border-t border-slate-100 dark:border-[#222222] space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-800 dark:text-[#EDEDED] font-sans">
-                  4. Notes / Reason *
-                </span>
-                <span className="text-[11px] text-slate-400 dark:text-zinc-500 font-sans">
-                  At least 3 letters
+                <div className="flex items-center gap-2">
+                  <FileText className="w-3.5 h-3.5 text-[#3ecf8e]" />
+                  <label className="block text-xs font-medium text-slate-700 dark:text-[#EDEDED]">
+                    Notes / Remarks *
+                  </label>
+                </div>
+                <span
+                  className={cn(
+                    'px-1.5 py-0.2 rounded-[4px] border font-mono text-[10.5px] font-medium transition-colors',
+                    remarks.length >= 240
+                      ? 'bg-amber-500/10 text-amber-500 border-amber-500/30 font-bold'
+                      : remarks.length >= 3
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-[#3ecf8e] border-emerald-500/20'
+                      : 'bg-slate-100 dark:bg-[#202020] text-slate-500 dark:text-zinc-400 border-slate-200 dark:border-[#2e2e2e]'
+                  )}
+                >
+                  {remarks.length} / 255
                 </span>
               </div>
 
               <textarea
-                rows={2}
+                rows={3}
+                maxLength={255}
                 value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                placeholder="e.g. Daily evening tea for sales team / Showroom light repair"
-                className="w-full rounded-[6px] border border-slate-200 dark:border-[#262626] bg-slate-50/50 dark:bg-[#121212] p-3 text-slate-900 dark:text-white text-xs font-sans placeholder:text-slate-400 dark:placeholder:text-zinc-600 focus:outline-none focus:border-[#3ecf8e] dark:focus:border-[#3ecf8e] focus:ring-1 focus:ring-[#3ecf8e]/30 resize-none shadow-xs"
+                onChange={(e) => setRemarks(e.target.value.slice(0, 255))}
+                placeholder="Enter detailed reason, item particulars, or payment context (e.g. Evening tea & snacks for 12 sales staff during festive rush)..."
+                className="w-full rounded-[8px] border border-slate-200 dark:border-[#262626] bg-slate-50/50 dark:bg-[#121212] p-2.5 text-slate-900 dark:text-white text-xs font-sans placeholder:text-slate-400 dark:placeholder:text-zinc-600 focus:outline-none focus:border-[#3ecf8e] dark:focus:border-[#3ecf8e] focus:ring-1 focus:ring-[#3ecf8e]/30 resize-none shadow-xs transition-colors leading-relaxed"
               />
-            </div>
-
-            {/* 5. ATTACH PHOTO OF BILL / CASH RECEIPT */}
-            <div className="p-4 sm:p-5 rounded-[12px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#262626] shadow-xs space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-semibold text-slate-800 dark:text-[#EDEDED] font-sans block">
-                    5. Attach Photo of Bill / Receipt
-                  </span>
-                  <span className="text-[11px] text-slate-500 dark:text-zinc-400 font-sans mt-0.5 block">
-                    Take photo or upload receipt (up to 4 photos)
-                  </span>
-                </div>
-
-                <span className="px-2 py-0.5 rounded-[4px] bg-slate-100 dark:bg-[#1f1f1f] text-slate-600 dark:text-zinc-400 text-[10px] font-mono border border-slate-200 dark:border-[#2e2e2e] shrink-0">
-                  {photoUrls.length} of 4 photos attached
-                </span>
-              </div>
-
-              <BillUploader photoUrls={photoUrls} onChange={setPhotoUrls} maxPhotos={4} />
+              <p className="text-[10px] text-slate-400 dark:text-zinc-500 font-sans">
+                Max 255 characters. Minimum 3 characters required.
+              </p>
             </div>
           </div>
 
-          {/* ========================================================================= */}
-          {/* RIGHT COLUMN: AMOUNT, PAYMENT TILL SOURCE, & DISBURSAL DOCK (4/5 cols)    */}
-          {/* ========================================================================= */}
-          <div className="lg:col-span-5 xl:col-span-4 space-y-4 lg:sticky lg:top-14">
-            {/* Amount Paid Card */}
-            <div className="p-4 sm:p-5 rounded-[12px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#262626] shadow-xs space-y-3.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-800 dark:text-[#EDEDED] font-sans">
-                  Amount to Pay
+          {/* CARD 3: ATTACH PHOTO OF BILL / CASH RECEIPT */}
+          <div className="p-3.5 sm:p-4 rounded-[12px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#262626] shadow-xs space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-xs font-semibold text-slate-800 dark:text-[#EDEDED] font-sans block">
+                  Attach Photo of Bill / Receipt
                 </span>
-                <span className="text-[10px] font-mono text-emerald-600 dark:text-[#3ecf8e] font-medium">
-                  Direct Cash / UPI
+                <span className="text-[11px] text-slate-500 dark:text-zinc-400 font-sans mt-0.5 block">
+                  Upload receipt or slip (up to 4 photos)
                 </span>
               </div>
 
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-1.5">
-                  <label className="block text-xs font-medium text-slate-800 dark:text-[#EDEDED]">
-                    Amount (₹) *
-                  </label>
-
-                  {mode !== 'Staff_Split' && (
-                    <div className="flex items-center gap-1">
-                      {AMOUNT_INCREMENTS.map((inc) => (
-                        <button
-                          key={inc}
-                          type="button"
-                          onClick={() => handleAddAmount(inc)}
-                          className="px-2 py-0.5 rounded-[4px] bg-slate-100 dark:bg-[#202020] hover:bg-slate-200 dark:hover:bg-[#282828] active:bg-[#3ecf8e]/20 border border-slate-200 dark:border-[#2e2e2e] text-[10px] font-mono font-medium text-slate-700 dark:text-zinc-300 transition-all cursor-pointer shadow-2xs"
-                        >
-                          +₹{inc >= 1000 ? `${inc / 1000}k` : inc}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="relative flex items-center rounded-[6px] bg-slate-50/60 dark:bg-[#121212] border border-slate-200 dark:border-[#262626] focus-within:border-[#3ecf8e] focus-within:ring-1 focus-within:ring-[#3ecf8e]/30 shadow-xs overflow-hidden min-h-[44px]">
-                  <span className="pl-3.5 pr-1 text-base font-mono text-slate-400 dark:text-zinc-500 font-medium select-none">
-                    ₹
-                  </span>
-                  <input
-                    ref={amountInputRef}
-                    type="number"
-                    inputMode="decimal"
-                    min="1"
-                    step="any"
-                    disabled={mode === 'Staff_Split'}
-                    value={mode === 'Staff_Split' ? finalCalculatedAmount || '' : amount}
-                    onChange={(e) => setAmount(e.target.value === '' ? '' : parseFloat(e.target.value) || '')}
-                    placeholder="0.00"
-                    className="w-full bg-transparent pl-1 pr-3 py-2 text-base font-mono font-semibold tabular-nums text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-zinc-600 focus:outline-none"
-                  />
-                </div>
-
-                {finalCalculatedAmount > 0 && (
-                  <div className="p-2 rounded-[6px] bg-slate-50 dark:bg-[#141414] border border-slate-200 dark:border-[#282828]">
-                    <span className="text-[11px] text-emerald-600 dark:text-[#3ecf8e] font-mono font-medium block truncate">
-                      {numberToWordsINR(finalCalculatedAmount)}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Payment Method Switch */}
-              <div className="space-y-1.5 pt-2 border-t border-slate-100 dark:border-[#242424]">
-                <label className="block text-xs font-medium text-slate-800 dark:text-[#EDEDED]">
-                  Paid From (Cash Box or UPI) *
-                </label>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      triggerHaptic('selection');
-                      setPaymentMethod('Physical_Cash');
-                    }}
-                    className={cn(
-                      'p-2.5 rounded-[6px] border text-left flex flex-col justify-between cursor-pointer transition-all shadow-xs min-h-[58px]',
-                      paymentMethod === 'Physical_Cash'
-                        ? 'bg-emerald-500/10 border-[#3ecf8e] text-slate-900 dark:text-white ring-1 ring-[#3ecf8e]/30'
-                        : 'bg-slate-50/50 dark:bg-[#121212] border-slate-200 dark:border-[#262626] text-slate-700 dark:text-[#A1A1A1] hover:bg-slate-100/60 dark:hover:bg-[#1c1c1c]'
-                    )}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium flex items-center gap-1.5">
-                        <Banknote className="w-3.5 h-3.5 text-emerald-600 dark:text-[#3ecf8e]" />
-                        <span>Cash Box</span>
-                      </span>
-                      {paymentMethod === 'Physical_Cash' && <Check className="w-3.5 h-3.5 text-[#3ecf8e] stroke-[2.5]" />}
-                    </div>
-                    <span className="text-[10px] font-mono text-emerald-600 dark:text-[#3ecf8e] tabular-nums font-semibold mt-1">
-                      Cash: {formatINR(cashBalance)}
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      triggerHaptic('selection');
-                      setPaymentMethod('Online_UPI');
-                    }}
-                    className={cn(
-                      'p-2.5 rounded-[6px] border text-left flex flex-col justify-between cursor-pointer transition-all shadow-xs min-h-[58px]',
-                      paymentMethod === 'Online_UPI'
-                        ? 'bg-sky-500/10 border-sky-400 text-slate-900 dark:text-white ring-1 ring-sky-400/30'
-                        : 'bg-slate-50/50 dark:bg-[#121212] border-slate-200 dark:border-[#262626] text-slate-700 dark:text-[#A1A1A1] hover:bg-slate-100/60 dark:hover:bg-[#1c1c1c]'
-                    )}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium flex items-center gap-1.5">
-                        <CreditCard className="w-3.5 h-3.5 text-sky-500" />
-                        <span>Bank UPI</span>
-                      </span>
-                      {paymentMethod === 'Online_UPI' && <Check className="w-3.5 h-3.5 text-sky-400 stroke-[2.5]" />}
-                    </div>
-                    <span className="text-[10px] font-mono text-sky-500 dark:text-sky-400 tabular-nums font-semibold mt-1">
-                      UPI: {formatINR(upiBalance)}
-                    </span>
-                  </button>
-                </div>
-              </div>
+              <span className="px-2 py-0.5 rounded-[4px] bg-slate-100 dark:bg-[#1f1f1f] text-slate-600 dark:text-zinc-400 text-[10px] font-mono border border-slate-200 dark:border-[#2e2e2e] shrink-0">
+                {photoUrls.length} of 4 attached
+              </span>
             </div>
 
-            {/* MASTER PAYMENT SUMMARY & PRIMARY CTA DOCK */}
-            <div className="p-4 sm:p-5 rounded-[12px] border border-slate-200 dark:border-[#262626] bg-slate-50/90 dark:bg-[#171717] shadow-xs space-y-4">
-              <div className="flex items-center justify-between pb-2.5 border-b border-slate-200 dark:border-[#242424]">
-                <div className="flex items-center gap-2">
-                  <Receipt className="w-4 h-4 text-[#3ecf8e]" />
-                  <span className="text-xs font-medium font-sans text-slate-900 dark:text-white">
-                    Payment Summary
-                  </span>
-                </div>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-[4px] bg-white dark:bg-[#1f1f1f] text-slate-700 dark:text-[#A1A1A1] border border-slate-200 dark:border-[#2e2e2e]">
-                  #{currBranch.branch_code}-{voucherDigits || '______'}
+            <BillUploader photoUrls={photoUrls} onChange={setPhotoUrls} maxPhotos={4} />
+          </div>
+
+          {/* 7. ADVANCED & SIMPLE SETTLEMENT DOCK */}
+          <div className="p-3.5 sm:p-4 rounded-[12px] bg-white dark:bg-[#171717] border border-slate-200 dark:border-[#262626] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            {/* Left: Total Disbursal + Payment Till Source Badge */}
+            <div className="flex items-center gap-3">
+              <div>
+                <span className="text-[10.5px] text-slate-400 dark:text-zinc-500 font-sans block font-medium">
+                  Total Disbursal
+                </span>
+                <span className="text-2xl sm:text-3xl font-bold font-mono text-slate-900 dark:text-white tabular-nums tracking-tight">
+                  {formatINR(finalCalculatedAmount)}
                 </span>
               </div>
+              <span className="px-2.5 py-1 rounded-[6px] text-xs font-mono font-medium bg-slate-100 dark:bg-[#202020] text-slate-700 dark:text-zinc-300 border border-slate-200 dark:border-[#2e2e2e] self-center">
+                {paymentMethod === 'Physical_Cash' ? 'Cash Box' : 'Bank UPI'}
+              </span>
+            </div>
 
-              <div className="space-y-1">
-                <div className="text-[11px] text-slate-500 dark:text-[#A1A1A1] font-sans flex items-center justify-between">
-                  <span>Total Payment:</span>
-                  <span className="px-1.5 py-0.2 rounded-[4px] text-[10px] font-mono font-medium bg-slate-200 dark:bg-[#202020] text-slate-700 dark:text-[#A1A1A1]">
-                    {paymentMethod === 'Physical_Cash' ? 'Cash' : 'UPI'}
-                  </span>
-                </div>
-                <div className="text-2xl sm:text-3xl font-medium font-mono text-slate-900 dark:text-white tabular-nums tracking-tight">
-                  {formatINR(finalCalculatedAmount)}
-                </div>
-              </div>
+            {/* Right: Actions Cluster */}
+            <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+              <button
+                type="button"
+                onClick={handleResetForm}
+                className="h-10 w-10 flex items-center justify-center rounded-[8px] border border-slate-200 dark:border-[#282828] bg-slate-50 dark:bg-[#1a1a1a] text-slate-600 dark:text-[#A1A1A1] hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#222222] transition-colors cursor-pointer shadow-2xs shrink-0"
+                title="Reset all form fields"
+              >
+                <RotateCcw className="w-4 h-4" />
+              </button>
 
-              {/* Action Buttons */}
-              <div className="space-y-2 pt-2">
-                {/* Exactly ONE filled emerald CTA button with near-black #171717 text per erpskill.md */}
-                <button
-                  type="submit"
-                  disabled={
-                    submitting ||
-                    (isInsufficientBalance && !allowNegative) ||
-                    (isPeriodLocked && !allowLockedPeriod && user?.role_code !== 'Super_Admin' && user?.role_code !== 'Developer')
-                  }
-                  className={cn(
-                    'w-full min-h-[42px] px-5 rounded-[6px] font-sans font-medium text-xs tracking-tight transition-all cursor-pointer select-none flex items-center justify-center gap-2 shadow-xs',
-                    isInsufficientBalance && !allowNegative
-                      ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-300 dark:border-rose-900/60 cursor-not-allowed'
-                      : isInsufficientBalance && allowNegative
-                      ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold'
-                      : isPeriodLocked && !allowLockedPeriod && user?.role_code !== 'Super_Admin' && user?.role_code !== 'Developer'
-                      ? 'bg-amber-600 text-white cursor-not-allowed opacity-80'
-                      : 'bg-[#3ecf8e] hover:bg-[#24b47e] text-[#171717]'
-                  )}
-                >
-                  <Zap className="w-4 h-4 text-[#171717] stroke-[2.5]" />
-                  <span>
-                    {submitting
-                      ? 'Saving...'
-                      : isInsufficientBalance && !allowNegative
-                      ? user?.role_code === 'Cashier'
-                        ? 'Insufficient Cash: Contact Store Manager'
-                        : 'Insufficient Cash: Add Cash First'
-                      : isInsufficientBalance && allowNegative
-                      ? 'Save & Pay (Overdraft Override)'
-                      : 'Save & Pay Expense'}
-                  </span>
-                </button>
+              <button
+                type="button"
+                onClick={() => setActivePage('dashboard')}
+                className="px-3.5 py-2 rounded-[6px] border border-slate-200 dark:border-[#282828] bg-slate-50 dark:bg-[#1a1a1a] text-slate-600 dark:text-[#A1A1A1] hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#222222] font-sans text-xs cursor-pointer transition-colors font-medium min-h-[38px] flex items-center justify-center shadow-2xs"
+              >
+                Cancel
+              </button>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={handleResetForm}
-                    className="w-full px-3 py-2 rounded-[6px] border border-slate-200 dark:border-[#262626] bg-transparent text-slate-700 dark:text-[#A1A1A1] hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#202020] font-sans text-xs cursor-pointer transition-colors font-medium min-h-[36px] flex items-center justify-center gap-1.5"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span>Clear Form</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setActivePage('dashboard')}
-                    className="w-full px-3 py-2 rounded-[6px] border border-slate-200 dark:border-[#262626] bg-transparent text-slate-700 dark:text-[#A1A1A1] hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#202020] font-sans text-xs cursor-pointer transition-colors font-medium min-h-[36px] flex items-center justify-center"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
+              <button
+                type="submit"
+                disabled={
+                  submitting ||
+                  (isInsufficientBalance && !allowNegative) ||
+                  (isPeriodLocked && !allowLockedPeriod && user?.role_code !== 'Super_Admin' && user?.role_code !== 'Developer')
+                }
+                className={cn(
+                  'flex-1 sm:flex-none min-h-[40px] px-5 sm:px-6 rounded-[8px] font-sans font-semibold text-xs sm:text-sm tracking-tight transition-all cursor-pointer select-none flex items-center justify-center gap-2 shadow-xs',
+                  isInsufficientBalance && !allowNegative
+                    ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-300 dark:border-rose-900/60 cursor-not-allowed'
+                    : isInsufficientBalance && allowNegative
+                    ? 'bg-amber-500 hover:bg-amber-400 text-slate-950 font-semibold'
+                    : isPeriodLocked && !allowLockedPeriod && user?.role_code !== 'Super_Admin' && user?.role_code !== 'Developer'
+                    ? 'bg-amber-600 text-white cursor-not-allowed opacity-80'
+                    : 'bg-[#3ecf8e] hover:bg-[#24b47e] text-[#171717] shadow-emerald-500/20 shadow-md'
+                )}
+              >
+                <Zap className="w-4 h-4 text-[#171717] stroke-[2.5]" />
+                <span>
+                  {submitting
+                    ? 'Saving...'
+                    : isInsufficientBalance && !allowNegative
+                    ? user?.role_code === 'Cashier'
+                      ? 'Insufficient Cash: Contact Store Manager'
+                      : 'Insufficient Cash: Add Cash First'
+                    : isInsufficientBalance && allowNegative
+                    ? 'Save & Pay (Overdraft Override)'
+                    : 'Save & Pay Expense (F2)'}
+                </span>
+              </button>
             </div>
           </div>
         </form>

@@ -5,10 +5,6 @@ import { useVouchers } from '@/hooks/useVouchers';
 import { useBranchStore } from '@/store/branchStore';
 import { erpService } from '@/lib/erpService';
 import {
-  useCloudConfigStore,
-  CloudConfig,
-} from '@/store/cloudConfigStore';
-import {
   AccountingPeriod,
   CurrencyDenomination,
   AppRole,
@@ -19,11 +15,11 @@ import {
   CourierPartner,
   StaffMember,
 } from '@/types/database';
-import { formatINR, formatDate, formatIndianPhone, cn, triggerHaptic } from '@/lib/utils';
+import { formatINR, formatDate, cn, triggerHaptic } from '@/lib/utils';
 import { MasterDataDrawer, MasterDrawerType } from '@/components/settings/MasterDataDrawer';
 import { BrandIdentitySetup } from '@/components/settings/BrandIdentitySetup';
 import { ThermalPrinterCustomizer } from '@/components/settings/ThermalPrinterCustomizer';
-import { useNotificationStore, BroadcastMessage } from '@/store/notificationStore';
+import { useNotificationStore } from '@/store/notificationStore';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { toast, showToast } from '@/components/ui/ToastContainer';
 import {
@@ -39,9 +35,6 @@ import {
   Plus,
   Edit2,
   FileSpreadsheet,
-  AlertTriangle,
-  CheckCircle2,
-  Store,
   Check,
   Search,
   Download,
@@ -50,46 +43,21 @@ import {
   Terminal,
   ChevronDown,
   X,
-  RotateCcw,
   Megaphone,
-  Radio,
   Send,
   Trash2,
   Sparkles,
-  ExternalLink,
   Shield,
   Users,
-  Database,
   Table as TableIcon,
   RefreshCw,
   LucideIcon,
-  SlidersHorizontal,
-  Filter,
-  Cloud,
-  Globe,
-  FileCode,
-  ShieldCheck,
-  Server,
-  Activity,
-  KeyRound,
-  Eye,
-  EyeOff,
-  UserCheck,
-  ChevronRight,
   Menu,
 } from 'lucide-react';
 
 export type SettingsTabId =
-  // CONFIGURATION
-  | 'general'
-  | 'supabase'
-  | 'r2'
-  | 'print'
-  | 'files'
-  | 'pages'
-  | 'domain'
-  // MASTER DATA & SHOWROOM
   | 'brand'
+  | 'print'
   | 'periods'
   | 'branches'
   | 'categories'
@@ -106,7 +74,7 @@ type ViewMode = 'grid' | 'ddl';
 interface SettingsTabMeta {
   id: SettingsTabId;
   name: string;
-  group: 'CONFIGURATION' | 'SHOWROOM MASTER DATA';
+  group: 'HARDWARE & PRINTING' | 'SHOWROOM MASTER DATA';
   tableName?: string;
   icon: LucideIcon;
   description: string;
@@ -115,66 +83,24 @@ interface SettingsTabMeta {
 }
 
 const SETTINGS_TABS: SettingsTabMeta[] = [
-  // 1. CONFIGURATION GROUP (Matching Supabase Studio Project Settings)
-  {
-    id: 'general',
-    name: 'General',
-    group: 'CONFIGURATION',
-    icon: SlidersHorizontal,
-    description: 'General configuration, project ID, region, and organization access',
-  },
-  {
-    id: 'supabase',
-    name: 'API Keys & Database',
-    group: 'CONFIGURATION',
-    icon: Database,
-    description: 'Supabase PostgreSQL database URL, anon/service keys, and latency ping test',
-  },
-  {
-    id: 'r2',
-    name: 'Storage & Media (R2)',
-    group: 'CONFIGURATION',
-    icon: Cloud,
-    description: 'Cloudflare R2 bucket storage, S3 access tokens, and CORS policy generator',
-  },
-  {
-    id: 'print',
-    name: 'Thermal Slip & Printer',
-    group: 'CONFIGURATION',
-    icon: Printer,
-    description: 'ESC/POS 80mm/58mm receipt paper format, GSTIN, header, copy count, and footer customizer',
-  },
-  {
-    id: 'files',
-    name: 'Project Files & .env',
-    group: 'CONFIGURATION',
-    icon: FileCode,
-    description: 'Live .env file generator, client fallback strings, and public/_redirects',
-  },
-  {
-    id: 'pages',
-    name: 'Cloudflare Pages',
-    group: 'CONFIGURATION',
-    icon: Globe,
-    description: 'Frontend hosting build command, output directory, and 8 environment variables',
-  },
-  {
-    id: 'domain',
-    name: 'Custom Domain & SSL',
-    group: 'CONFIGURATION',
-    icon: ShieldCheck,
-    description: 'CNAME DNS routing, Full (strict) SSL certificate, and 10-point checklist',
-  },
-
-  // 2. SHOWROOM MASTER DATA GROUP (ERP Master Catalogues)
+  // 1. BRAND & HARDWARE
   {
     id: 'brand',
     name: 'Brand & Logo',
-    group: 'SHOWROOM MASTER DATA',
+    group: 'HARDWARE & PRINTING',
     tableName: 'brand_settings',
     icon: Sparkles,
     description: 'Shop logo, company name, GST number, address, and live receipt preview',
   },
+  {
+    id: 'print',
+    name: 'Thermal Slip & Printer',
+    group: 'HARDWARE & PRINTING',
+    icon: Printer,
+    description: 'ESC/POS 80mm/58mm receipt paper format, GSTIN, header, copy count, and footer customizer',
+  },
+
+  // 2. SHOWROOM MASTER DATA GROUP (ERP Master Catalogues)
   {
     id: 'periods',
     name: 'Monthly Accounts Lock',
@@ -274,35 +200,14 @@ export const ShowroomSettingsPage: React.FC = () => {
   const { categories, departments, couriers, refresh } = useVouchers();
   const { broadcast, setBroadcast } = useNotificationStore();
 
-  // Cloud Config Store
-  const {
-    config: cloudConfig,
-    checklist,
-    isTestingConnection,
-    lastTestResult,
-    updateConfig: updateCloudConfig,
-    resetToDefaults: resetCloudConfigDefaults,
-    toggleChecklistItem,
-    testSupabaseConnection,
-    generateEnvContent,
-    generateCorsJson,
-  } = useCloudConfigStore();
-
-  // Active Tab State (Default to 'general' matching Supabase Studio settings)
-  const [activeTabId, setActiveTabId] = useState<SettingsTabId>('general');
+  // Active Tab State (Default to 'brand')
+  const [activeTabId, setActiveTabId] = useState<SettingsTabId>('brand');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const [density, setDensity] = useState<TableDensity>('normal');
+  const [density] = useState<TableDensity>('normal');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [isLoading, setIsLoading] = useState(false);
   const [isCopiedDdl, setIsCopiedDdl] = useState(false);
-  const [copiedField, setCopiedField] = useState<string | null>(null);
-
-  // Form State for Cloud Settings
-  const [cloudFormData, setCloudFormData] = useState<CloudConfig>(cloudConfig);
-  const [showAnonKey, setShowAnonKey] = useState(false);
-  const [showSecretKey, setShowSecretKey] = useState(false);
-  const [isSavingCloud, setIsSavingCloud] = useState(false);
   const [isMobileSubMenuOpen, setIsMobileSubMenuOpen] = useState(false);
 
   // Data Stores
@@ -331,11 +236,6 @@ export const ShowroomSettingsPage: React.FC = () => {
   const [isCustomBadge, setIsCustomBadge] = useState(false);
 
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-
-  // Keep cloudFormData in sync with store
-  useEffect(() => {
-    setCloudFormData(cloudConfig);
-  }, [cloudConfig]);
 
   // Keyboard shortcut: Press "/" to focus search when inside master tables
   useEffect(() => {
@@ -405,14 +305,8 @@ export const ShowroomSettingsPage: React.FC = () => {
   // Table Row Counts for badges
   const counts: Record<SettingsTabId, number> = useMemo(
     () => ({
-      general: 1,
-      supabase: 1,
-      r2: 1,
-      print: 1,
-      files: 1,
-      pages: 8,
-      domain: 10,
       brand: 1,
+      print: 1,
       periods: periods.length,
       branches: branches.length,
       categories: categories.length,
@@ -425,43 +319,6 @@ export const ShowroomSettingsPage: React.FC = () => {
     }),
     [periods, branches, categories, departments, couriers, staffMembers, roles, denominations, broadcast]
   );
-
-  // Copy helper with haptic and toast
-  const handleCopyText = (text: string, fieldId: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedField(fieldId);
-    triggerHaptic('light');
-    showToast({
-      type: 'success',
-      title: 'Copied to Clipboard',
-      message: `${label} copied.`,
-    });
-    setTimeout(() => setCopiedField(null), 2000);
-  };
-
-  // Instant Cloud Settings Apply
-  const handleSaveCloudChanges = async () => {
-    setIsSavingCloud(true);
-    triggerHaptic('heavy');
-    try {
-      updateCloudConfig(cloudFormData);
-      showToast({
-        type: 'success',
-        title: 'Changes Saved & Applied',
-        message: 'Configuration updated and hot-reloaded across the application.',
-      });
-      // Run quick ping verification
-      testSupabaseConnection(cloudFormData.supabaseUrl, cloudFormData.supabasePublishableKey);
-    } catch (err: any) {
-      showToast({
-        type: 'error',
-        title: 'Save Failed',
-        message: err.message || 'Failed to save configuration.',
-      });
-    } finally {
-      setIsSavingCloud(false);
-    }
-  };
 
   // Handlers for Master Data Drawer
   const handleOpenInsert = () => {
@@ -665,7 +522,7 @@ export const ShowroomSettingsPage: React.FC = () => {
         data = broadcast ? [broadcast] : [];
         break;
       default:
-        data = cloudConfig;
+        data = [];
     }
     const jsonStr = JSON.stringify(data, null, 2);
     downloadBlob(`${currentTab.id}_schema.json`, jsonStr, 'application/json');
@@ -852,8 +709,7 @@ CREATE TABLE public.system_broadcasts (
 );`;
 
       default:
-        return `-- Configuration Schema
--- Target: Supabase PostgreSQL (Mumbai ap-south-1) + Cloudflare R2 + Cloudflare Pages`;
+        return `-- Showroom Master Schema`;
     }
   }, [activeTabId]);
 
@@ -1042,7 +898,7 @@ CREATE TABLE public.system_broadcasts (
               Settings Access Restricted
             </h1>
             <p className="text-xs text-slate-500 dark:text-[#888888] leading-relaxed">
-              Showroom configuration and cloud deployment infrastructure are restricted to <strong>Super Admin</strong> and <strong>Developer</strong> accounts.
+              Showroom configuration and master data catalogues are restricted to <strong>Super Admin</strong> and <strong>Developer</strong> accounts.
             </p>
           </div>
           <button
@@ -1057,25 +913,10 @@ CREATE TABLE public.system_broadcasts (
     );
   }
 
-  // Pre-launch checklist items for domain tab
-  const checklistItems = [
-    { id: 1, title: 'Phase 1: SQL Database Schema executed in Supabase SQL Editor' },
-    { id: 2, title: 'Phase 1: 303 showroom staff members visible in "staff_members"' },
-    { id: 3, title: 'Phase 1: Super Admin account (USR-ADMIN / aellpadmin) verified' },
-    { id: 4, title: 'Phase 2: Cloudflare R2 bucket created & Public Access enabled' },
-    { id: 5, title: 'Phase 2: R2 CORS Policy JSON saved in bucket settings' },
-    { id: 6, title: 'Phase 2: R2 S3 API Token generated with Object Read & Write' },
-    { id: 7, title: 'Phase 3: Production .env credentials saved & verified' },
-    { id: 8, title: 'Phase 4: Cloudflare Pages deployed with 7 Environment Variables' },
-    { id: 9, title: 'Phase 4: Build command "npm run build" passes with 0 errors' },
-    { id: 10, title: 'Phase 5: Custom Domain & Full (strict) SSL certificate verified' },
-  ];
-  const completedChecklistCount = checklistItems.filter((item) => checklist[item.id]).length;
-
   return (
     <div className="h-[calc(100vh-3.5rem)] flex flex-col bg-white dark:bg-[#141414] text-slate-900 dark:text-[#EDEDED] font-sans antialiased overflow-hidden selection:bg-[#3ecf8e]/20 selection:text-[#3ecf8e]">
       {/* ========================================================================= */}
-      {/* 1. MASTER TWO-COLUMN WORKSPACE (SUPABASE STUDIO SETTINGS LAYOUT)           */}
+      {/* 1. MASTER TWO-COLUMN WORKSPACE                                            */}
       {/* ========================================================================= */}
       <div className="flex-1 flex overflow-hidden min-h-0 min-w-0">
         {/* ----------------------------------------------------------------------- */}
@@ -1090,9 +931,9 @@ CREATE TABLE public.system_broadcasts (
           {/* Sub-Sidebar Top Header */}
           <div className="p-3.5 border-b border-slate-200 dark:border-[#242424] flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <SlidersHorizontal className="w-4 h-4 text-[#3ecf8e]" />
+              <Sparkles className="w-4 h-4 text-[#3ecf8e]" />
               <span className="text-xs font-semibold uppercase tracking-wider text-slate-900 dark:text-white font-mono">
-                Settings
+                Showroom Settings
               </span>
             </div>
             {isMobileSubMenuOpen && (
@@ -1108,12 +949,12 @@ CREATE TABLE public.system_broadcasts (
 
           {/* Navigation Groups */}
           <div className="p-2 space-y-5">
-            {/* GROUP 1: CONFIGURATION (Matching Supabase Studio Project Settings) */}
+            {/* GROUP 1: HARDWARE & PRINTING */}
             <div className="space-y-1">
               <div className="px-2.5 py-1 text-[10px] font-mono font-semibold uppercase tracking-wider text-slate-400 dark:text-[#666666]">
-                Configuration
+                Brand &amp; Printing
               </div>
-              {SETTINGS_TABS.filter((t) => t.group === 'CONFIGURATION').map((tab) => {
+              {SETTINGS_TABS.filter((t) => t.group === 'HARDWARE & PRINTING').map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTabId === tab.id;
                 return (
@@ -1141,9 +982,6 @@ CREATE TABLE public.system_broadcasts (
                       />
                       <span className="truncate">{tab.name}</span>
                     </div>
-                    {tab.id === 'supabase' && lastTestResult?.success && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#3ecf8e] animate-pulse shrink-0" />
-                    )}
                   </button>
                 );
               })}
@@ -1228,7 +1066,7 @@ CREATE TABLE public.system_broadcasts (
               <div>
                 <h1 className="text-xl sm:text-2xl font-medium tracking-tight text-slate-900 dark:text-white font-sans flex items-center gap-2.5">
                   <currentTab.icon className="w-5 h-5 text-[#3ecf8e]" />
-                  <span>{currentTab.group === 'CONFIGURATION' ? 'Project Settings' : currentTab.name}</span>
+                  <span>{currentTab.name}</span>
                 </h1>
                 <p className="text-xs text-slate-500 dark:text-[#888888] font-sans mt-1">
                   {currentTab.description}
@@ -1313,610 +1151,7 @@ CREATE TABLE public.system_broadcasts (
           {/* Main Pane Body Container */}
           <div className="p-4 sm:p-6 lg:p-8 space-y-6 flex-1">
             {/* =================================================================== */}
-            {/* VIEW 1: GENERAL SETTINGS (Matching media_1790011544122.png)         */}
-            {/* =================================================================== */}
-            {activeTabId === 'general' && (
-              <div className="space-y-6 max-w-4xl animate-in fade-in">
-                {/* Section 1: General Settings Card */}
-                <div className="space-y-2">
-                  <h3 className="text-sm font-medium text-slate-900 dark:text-white font-sans">
-                    General settings
-                  </h3>
-                  <div className="rounded-[12px] bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#2e2e2e] p-5 sm:p-6 space-y-5 shadow-xs">
-                    {/* Row 1: Project Name */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4 items-center border-b border-slate-100 dark:border-[#242424] pb-4">
-                      <div>
-                        <label className="text-xs font-semibold text-slate-800 dark:text-zinc-200 font-sans block">
-                          Project name
-                        </label>
-                        <p className="text-[11px] text-slate-400 dark:text-[#888] mt-0.5">
-                          Displayed throughout the dashboard.
-                        </p>
-                      </div>
-                      <div className="sm:col-span-2">
-                        <input
-                          type="text"
-                          value={cloudFormData.pagesProjectName || 'Asopalav ERP'}
-                          onChange={(e) =>
-                            setCloudFormData((p) => ({ ...p, pagesProjectName: e.target.value }))
-                          }
-                          className="w-full max-w-md px-3 py-2 rounded-[6px] bg-slate-50 dark:bg-[#121212] border border-slate-300 dark:border-[#2e2e2e] focus:border-[#3ecf8e] text-xs font-mono text-slate-900 dark:text-white outline-none"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Row 2: Project ID */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4 items-center border-b border-slate-100 dark:border-[#242424] pb-4">
-                      <div>
-                        <label className="text-xs font-semibold text-slate-800 dark:text-zinc-200 font-sans block">
-                          Project ID
-                        </label>
-                        <p className="text-[11px] text-slate-400 dark:text-[#888] mt-0.5">
-                          Reference used in APIs and URLs.
-                        </p>
-                      </div>
-                      <div className="sm:col-span-2 flex items-center gap-2 max-w-md">
-                        <input
-                          type="text"
-                          readOnly
-                          value={
-                            cloudFormData.supabaseUrl.replace(/^https?:\/\//, '').split('.')[0] ||
-                            'eumurshcjuvejbfnjejz'
-                          }
-                          className="w-full px-3 py-2 rounded-[6px] bg-slate-50 dark:bg-[#121212] border border-slate-300 dark:border-[#2e2e2e] text-xs font-mono text-slate-700 dark:text-zinc-300 outline-none select-all"
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleCopyText(
-                              cloudFormData.supabaseUrl.replace(/^https?:\/\//, '').split('.')[0] ||
-                                'eumurshcjuvejbfnjejz',
-                              'project_id',
-                              'Project ID'
-                            )
-                          }
-                          className="h-8.5 px-3 rounded-[6px] border border-slate-300 dark:border-[#333] hover:bg-slate-100 dark:hover:bg-[#222] text-xs font-mono flex items-center gap-1.5 cursor-pointer text-slate-700 dark:text-zinc-300 shrink-0"
-                        >
-                          {copiedField === 'project_id' ? (
-                            <Check className="w-3.5 h-3.5 text-[#3ecf8e]" />
-                          ) : (
-                            <Copy className="w-3.5 h-3.5" />
-                          )}
-                          <span>{copiedField === 'project_id' ? 'Copied' : 'Copy'}</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Row 3: Project Region */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4 items-center border-b border-slate-100 dark:border-[#242424] pb-4">
-                      <div>
-                        <label className="text-xs font-semibold text-slate-800 dark:text-zinc-200 font-sans block">
-                          Project region
-                        </label>
-                        <p className="text-[11px] text-slate-400 dark:text-[#888] mt-0.5">
-                          South Asia (Mumbai)
-                        </p>
-                      </div>
-                      <div className="sm:col-span-2 flex items-center gap-2 max-w-md">
-                        <input
-                          type="text"
-                          readOnly
-                          value="ap-south-1"
-                          className="w-full px-3 py-2 rounded-[6px] bg-slate-50 dark:bg-[#121212] border border-slate-300 dark:border-[#2e2e2e] text-xs font-mono text-slate-700 dark:text-zinc-300 outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleCopyText('ap-south-1', 'region', 'Project Region')}
-                          className="h-8.5 px-3 rounded-[6px] border border-slate-300 dark:border-[#333] hover:bg-slate-100 dark:hover:bg-[#222] text-xs font-mono flex items-center gap-1.5 cursor-pointer text-slate-700 dark:text-zinc-300 shrink-0"
-                        >
-                          {copiedField === 'region' ? (
-                            <Check className="w-3.5 h-3.5 text-[#3ecf8e]" />
-                          ) : (
-                            <Copy className="w-3.5 h-3.5" />
-                          )}
-                          <span>{copiedField === 'region' ? 'Copied' : 'Copy'}</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Row 4: Custom Domain */}
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4 items-center pb-2">
-                      <div>
-                        <label className="text-xs font-semibold text-slate-800 dark:text-zinc-200 font-sans block">
-                          Custom domain
-                        </label>
-                        <p className="text-[11px] text-slate-400 dark:text-[#888] mt-0.5">
-                          Production ERP endpoint.
-                        </p>
-                      </div>
-                      <div className="sm:col-span-2">
-                        <input
-                          type="text"
-                          value={cloudFormData.customDomain}
-                          onChange={(e) =>
-                            setCloudFormData((p) => ({ ...p, customDomain: e.target.value }))
-                          }
-                          placeholder="erp.asopalav.com"
-                          className="w-full max-w-md px-3 py-2 rounded-[6px] bg-slate-50 dark:bg-[#121212] border border-slate-300 dark:border-[#2e2e2e] focus:border-[#3ecf8e] text-xs font-mono text-slate-900 dark:text-white outline-none"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Bottom Save Changes CTA */}
-                    <div className="pt-3 border-t border-slate-100 dark:border-[#242424] flex justify-end">
-                      <button
-                        type="button"
-                        onClick={handleSaveCloudChanges}
-                        disabled={isSavingCloud}
-                        className="px-4 py-2 rounded-[6px] bg-[#3ecf8e] hover:bg-[#24b47e] text-[#171717] font-medium text-xs font-sans flex items-center gap-2 cursor-pointer shadow-xs select-none transition-colors"
-                      >
-                        <Check className="w-3.5 h-3.5 text-[#171717] stroke-[3]" />
-                        <span>{isSavingCloud ? 'Applying...' : 'Save changes'}</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Section 2: Project Access Card (Matching media_1790011544122.png) */}
-                <div className="space-y-2">
-                  <h3 className="text-sm font-medium text-slate-900 dark:text-white font-sans">
-                    Project access
-                  </h3>
-                  <div className="rounded-[12px] bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#2e2e2e] p-5 sm:p-6 space-y-4 shadow-xs">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-[#242424]">
-                      <div>
-                        <h4 className="text-xs font-semibold text-slate-900 dark:text-white font-sans">
-                          Organization-wide access
-                        </h4>
-                        <p className="text-[11px] text-slate-500 dark:text-[#888]">
-                          All authorized showroom administrators can access this project.
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setActiveTabId('staff')}
-                        className="h-8 px-3 rounded-[6px] border border-slate-300 dark:border-[#333] hover:bg-slate-100 dark:hover:bg-[#222] text-slate-700 dark:text-zinc-300 text-xs font-sans font-medium cursor-pointer"
-                      >
-                        Manage members
-                      </button>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs font-mono">
-                        <thead>
-                          <tr className="text-[10px] text-slate-400 dark:text-[#707070] uppercase tracking-wider border-b border-slate-100 dark:border-[#242424]">
-                            <th className="pb-2 font-medium">MEMBER</th>
-                            <th className="pb-2 font-medium text-right">ROLE</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-[#242424]">
-                          <tr>
-                            <td className="py-3 text-slate-900 dark:text-white flex items-center gap-2">
-                              <span>it@asopalav.com</span>
-                              <span className="px-1.5 py-0.2 rounded text-[10px] font-sans font-medium bg-slate-100 dark:bg-[#252525] text-slate-600 dark:text-zinc-300 border border-slate-200 dark:border-[#333]">
-                                YOU
-                              </span>
-                            </td>
-                            <td className="py-3 text-right text-slate-600 dark:text-[#aaa]">Owner</td>
-                          </tr>
-                          <tr>
-                            <td className="py-3 text-slate-900 dark:text-white flex items-center gap-2">
-                              <span>aellpadmin (Super Administrator)</span>
-                              <span className="px-1.5 py-0.2 rounded text-[10px] font-sans font-medium bg-emerald-500/10 text-[#3ecf8e] border border-[#3ecf8e]/30">
-                                ACTIVE
-                              </span>
-                            </td>
-                            <td className="py-3 text-right text-slate-600 dark:text-[#aaa]">Super Admin</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* =================================================================== */}
-            {/* VIEW 2: SUPABASE PROJECT SETUP                                      */}
-            {/* =================================================================== */}
-            {activeTabId === 'supabase' && (
-              <div className="space-y-6 max-w-4xl animate-in fade-in">
-                <div className="rounded-[12px] bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#2e2e2e] p-5 sm:p-6 space-y-5 shadow-xs">
-                  <div className="flex items-center justify-between border-b border-slate-100 dark:border-[#242424] pb-3">
-                    <div>
-                      <h3 className="text-sm font-semibold text-slate-900 dark:text-white font-sans">
-                        Supabase PostgreSQL Connection &amp; Auth
-                      </h3>
-                      <p className="text-xs text-slate-500 dark:text-[#888] mt-0.5">
-                        Mumbai Region (<code>ap-south-1</code>) endpoint credentials.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => testSupabaseConnection(cloudFormData.supabaseUrl, cloudFormData.supabasePublishableKey)}
-                      disabled={isTestingConnection}
-                      className="h-8 px-3 rounded-[6px] bg-slate-100 dark:bg-[#202020] hover:bg-slate-200 dark:hover:bg-[#2a2a2a] border border-slate-300 dark:border-[#333] text-slate-700 dark:text-zinc-200 text-xs font-mono flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Activity className={cn('w-3.5 h-3.5 text-[#3ecf8e]', isTestingConnection && 'animate-spin')} />
-                      <span>{isTestingConnection ? 'Pinging...' : 'Test Connection'}</span>
-                    </button>
-                  </div>
-
-                  {lastTestResult && (
-                    <div
-                      className={cn(
-                        'p-3 rounded-[8px] border text-xs font-mono flex items-center justify-between',
-                        lastTestResult.success
-                          ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800/40 text-emerald-800 dark:text-emerald-300'
-                          : 'bg-rose-50 dark:bg-rose-950/20 border-rose-300 dark:border-rose-800/40 text-rose-800 dark:text-rose-300'
-                      )}
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className={cn('w-2 h-2 rounded-full shrink-0', lastTestResult.success ? 'bg-[#3ecf8e]' : 'bg-rose-500')} />
-                        <span>{lastTestResult.message}</span>
-                      </div>
-                      {lastTestResult.details && (
-                        <span className="text-[11px] opacity-80">
-                          Verified: Users ({lastTestResult.details.appUsersCount}), Staff ({lastTestResult.details.staffCount})
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="space-y-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-800 dark:text-zinc-200 font-sans block">
-                        Supabase Project URL (VITE_SUPABASE_URL)
-                      </label>
-                      <input
-                        type="text"
-                        value={cloudFormData.supabaseUrl}
-                        onChange={(e) => setCloudFormData((p) => ({ ...p, supabaseUrl: e.target.value }))}
-                        placeholder="https://<project-ref>.supabase.co"
-                        className="w-full px-3 py-2 rounded-[6px] bg-slate-50 dark:bg-[#121212] border border-slate-300 dark:border-[#2e2e2e] focus:border-[#3ecf8e] text-xs font-mono text-slate-900 dark:text-white outline-none"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-800 dark:text-zinc-200 font-sans flex items-center justify-between">
-                        <span>Anon / Publishable API Key (VITE_SUPABASE_PUBLISHABLE_KEY)</span>
-                        <a
-                          href="https://supabase.com/dashboard"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[11px] text-[#3ecf8e] hover:underline flex items-center gap-1 font-sans"
-                        >
-                          <span>Supabase Console</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={showAnonKey ? 'text' : 'password'}
-                          value={cloudFormData.supabasePublishableKey}
-                          onChange={(e) =>
-                            setCloudFormData((p) => ({ ...p, supabasePublishableKey: e.target.value }))
-                          }
-                          placeholder="sb_publishable_... or eyJh..."
-                          className="w-full pl-3 pr-10 py-2 rounded-[6px] bg-slate-50 dark:bg-[#121212] border border-slate-300 dark:border-[#2e2e2e] focus:border-[#3ecf8e] text-xs font-mono text-slate-900 dark:text-white outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowAnonKey(!showAnonKey)}
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
-                        >
-                          {showAnonKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-3 border-t border-slate-100 dark:border-[#242424] flex justify-end">
-                    <button
-                      type="button"
-                      onClick={handleSaveCloudChanges}
-                      disabled={isSavingCloud}
-                      className="px-4 py-2 rounded-[6px] bg-[#3ecf8e] hover:bg-[#24b47e] text-[#171717] font-medium text-xs font-sans flex items-center gap-2 cursor-pointer shadow-xs select-none transition-colors"
-                    >
-                      <Check className="w-3.5 h-3.5 text-[#171717] stroke-[3]" />
-                      <span>{isSavingCloud ? 'Applying...' : 'Apply & Reconnect'}</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* =================================================================== */}
-            {/* VIEW 3: CLOUDFLARE R2 STORAGE                                       */}
-            {/* =================================================================== */}
-            {activeTabId === 'r2' && (
-              <div className="space-y-6 max-w-4xl animate-in fade-in">
-                <div className="rounded-[12px] bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#2e2e2e] p-5 sm:p-6 space-y-5 shadow-xs">
-                  <div className="border-b border-slate-100 dark:border-[#242424] pb-3">
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white font-sans">
-                      Cloudflare R2 Object Storage Configuration
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-[#888] mt-0.5">
-                      Zero-egress storage for expense receipts, voucher bill attachments, and staff profile avatars.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-800 dark:text-zinc-200 font-sans block">
-                        Cloudflare Account ID (VITE_CLOUDFLARE_ACCOUNT_ID)
-                      </label>
-                      <input
-                        type="text"
-                        value={cloudFormData.cloudflareAccountId}
-                        onChange={(e) =>
-                          setCloudFormData((p) => ({ ...p, cloudflareAccountId: e.target.value }))
-                        }
-                        className="w-full px-3 py-2 rounded-[6px] bg-slate-50 dark:bg-[#121212] border border-slate-300 dark:border-[#2e2e2e] focus:border-[#3ecf8e] text-xs font-mono text-slate-900 dark:text-white outline-none"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-800 dark:text-zinc-200 font-sans block">
-                        R2 Bucket Name (VITE_R2_BUCKET_NAME)
-                      </label>
-                      <input
-                        type="text"
-                        value={cloudFormData.r2BucketName}
-                        onChange={(e) => setCloudFormData((p) => ({ ...p, r2BucketName: e.target.value }))}
-                        className="w-full px-3 py-2 rounded-[6px] bg-slate-50 dark:bg-[#121212] border border-slate-300 dark:border-[#2e2e2e] focus:border-[#3ecf8e] text-xs font-mono text-slate-900 dark:text-white outline-none"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <label className="text-xs font-semibold text-slate-800 dark:text-zinc-200 font-sans block">
-                        Public Domain / R2.dev URL (VITE_R2_PUBLIC_DOMAIN)
-                      </label>
-                      <input
-                        type="text"
-                        value={cloudFormData.r2PublicDomain}
-                        onChange={(e) => setCloudFormData((p) => ({ ...p, r2PublicDomain: e.target.value }))}
-                        className="w-full px-3 py-2 rounded-[6px] bg-slate-50 dark:bg-[#121212] border border-slate-300 dark:border-[#2e2e2e] focus:border-[#3ecf8e] text-xs font-mono text-slate-900 dark:text-white outline-none"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-800 dark:text-zinc-200 font-sans block">
-                        R2 Access Key ID (VITE_R2_ACCESS_KEY_ID)
-                      </label>
-                      <input
-                        type="text"
-                        value={cloudFormData.r2AccessKeyId}
-                        onChange={(e) => setCloudFormData((p) => ({ ...p, r2AccessKeyId: e.target.value }))}
-                        className="w-full px-3 py-2 rounded-[6px] bg-slate-50 dark:bg-[#121212] border border-slate-300 dark:border-[#2e2e2e] focus:border-[#3ecf8e] text-xs font-mono text-slate-900 dark:text-white outline-none"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-slate-800 dark:text-zinc-200 font-sans block">
-                        R2 Secret Access Key (VITE_R2_SECRET_ACCESS_KEY)
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={showSecretKey ? 'text' : 'password'}
-                          value={cloudFormData.r2SecretAccessKey}
-                          onChange={(e) =>
-                            setCloudFormData((p) => ({ ...p, r2SecretAccessKey: e.target.value }))
-                          }
-                          className="w-full pl-3 pr-10 py-2 rounded-[6px] bg-slate-50 dark:bg-[#121212] border border-slate-300 dark:border-[#2e2e2e] focus:border-[#3ecf8e] text-xs font-mono text-slate-900 dark:text-white outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowSecretKey(!showSecretKey)}
-                          className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 dark:hover:text-zinc-200"
-                        >
-                          {showSecretKey ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-3 border-t border-slate-100 dark:border-[#242424] flex items-center justify-between">
-                    <button
-                      type="button"
-                      onClick={() => handleCopyText(generateCorsJson(), 'cors_json', 'R2 CORS Policy JSON')}
-                      className="text-xs font-mono text-[#3ecf8e] hover:underline flex items-center gap-1 cursor-pointer"
-                    >
-                      <Copy className="w-3 h-3" />
-                      <span>{copiedField === 'cors_json' ? 'Copied CORS JSON' : 'Copy CORS JSON Policy'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleSaveCloudChanges}
-                      disabled={isSavingCloud}
-                      className="px-4 py-2 rounded-[6px] bg-[#3ecf8e] hover:bg-[#24b47e] text-[#171717] font-medium text-xs font-sans flex items-center gap-2 cursor-pointer shadow-xs select-none transition-colors"
-                    >
-                      <Check className="w-3.5 h-3.5 text-[#171717] stroke-[3]" />
-                      <span>{isSavingCloud ? 'Saving...' : 'Save Storage Settings'}</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* =================================================================== */}
-            {/* VIEW: THERMAL SLIP & PRINTER CUSTOMIZER                             */}
-            {/* =================================================================== */}
-            {activeTabId === 'print' && (
-              <div className="animate-in fade-in">
-                <ThermalPrinterCustomizer />
-              </div>
-            )}
-
-            {/* =================================================================== */}
-            {/* VIEW 4: PROJECT FILES & .ENV                                        */}
-            {/* =================================================================== */}
-            {activeTabId === 'files' && (
-              <div className="space-y-6 max-w-4xl animate-in fade-in">
-                <div className="rounded-[12px] bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#2e2e2e] p-5 sm:p-6 space-y-4 shadow-xs">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-[#242424] pb-3">
-                    <div>
-                      <h3 className="text-sm font-semibold text-slate-900 dark:text-white font-sans">
-                        Root .env Environment File
-                      </h3>
-                      <p className="text-xs text-slate-500 dark:text-[#888] mt-0.5">
-                        Generated live from your current settings. Place in project root.
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleCopyText(generateEnvContent(), 'env_file', '.env file content')}
-                        className="h-8 px-3 rounded-[6px] bg-slate-100 dark:bg-[#202020] hover:bg-slate-200 dark:hover:bg-[#2a2a2a] border border-slate-300 dark:border-[#333] text-slate-700 dark:text-zinc-200 text-xs font-mono flex items-center gap-1.5 cursor-pointer"
-                      >
-                        {copiedField === 'env_file' ? (
-                          <Check className="w-3 h-3 text-[#3ecf8e]" />
-                        ) : (
-                          <Copy className="w-3 h-3" />
-                        )}
-                        <span>{copiedField === 'env_file' ? 'Copied' : 'Copy .env'}</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => downloadBlob('.env', generateEnvContent(), 'text/plain')}
-                        className="h-8 px-3 rounded-[6px] bg-[#3ecf8e] hover:bg-[#24b47e] text-[#171717] text-xs font-sans font-medium flex items-center gap-1.5 cursor-pointer shadow-xs"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>Download .env</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="p-3.5 rounded-[8px] bg-slate-900 text-emerald-400 font-mono text-xs overflow-x-auto leading-relaxed border border-slate-800">
-                    <pre>{generateEnvContent()}</pre>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* =================================================================== */}
-            {/* VIEW 5: CLOUDFLARE PAGES                                            */}
-            {/* =================================================================== */}
-            {activeTabId === 'pages' && (
-              <div className="space-y-6 max-w-4xl animate-in fade-in">
-                <div className="rounded-[12px] bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#2e2e2e] p-5 sm:p-6 space-y-4 shadow-xs">
-                  <div className="border-b border-slate-100 dark:border-[#242424] pb-3">
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white font-sans">
-                      Cloudflare Pages Build Configuration
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-[#888] mt-0.5">
-                      Production build parameters and environment variables for Cloudflare Pages dashboard.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="p-3 rounded-[8px] bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#242424]">
-                      <span className="text-[10px] text-slate-400 font-mono uppercase">Build Command</span>
-                      <p className="text-xs font-mono font-semibold text-slate-900 dark:text-white mt-1">npm run build</p>
-                    </div>
-                    <div className="p-3 rounded-[8px] bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#242424]">
-                      <span className="text-[10px] text-slate-400 font-mono uppercase">Output Directory</span>
-                      <p className="text-xs font-mono font-semibold text-slate-900 dark:text-white mt-1">dist</p>
-                    </div>
-                    <div className="p-3 rounded-[8px] bg-slate-50 dark:bg-[#121212] border border-slate-200 dark:border-[#242424]">
-                      <span className="text-[10px] text-slate-400 font-mono uppercase">Node Version</span>
-                      <p className="text-xs font-mono font-semibold text-slate-900 dark:text-white mt-1">NODE_VERSION = 20</p>
-                    </div>
-                  </div>
-
-                  <div className="rounded-[8px] border border-slate-200 dark:border-[#282828] overflow-hidden">
-                    <table className="w-full text-left text-xs font-mono">
-                      <thead className="bg-slate-100 dark:bg-[#202020] text-slate-600 dark:text-zinc-400 border-b border-slate-200 dark:border-[#282828]">
-                        <tr>
-                          <th className="p-2.5 font-medium">Variable Name</th>
-                          <th className="p-2.5 font-medium">Configured Value</th>
-                          <th className="p-2.5 font-medium text-right">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-[#242424]">
-                        {[
-                          { key: 'VITE_SUPABASE_URL', val: cloudFormData.supabaseUrl },
-                          { key: 'VITE_SUPABASE_PUBLISHABLE_KEY', val: cloudFormData.supabasePublishableKey },
-                          { key: 'VITE_CLOUDFLARE_ACCOUNT_ID', val: cloudFormData.cloudflareAccountId },
-                          { key: 'VITE_R2_BUCKET_NAME', val: cloudFormData.r2BucketName },
-                          { key: 'VITE_R2_PUBLIC_DOMAIN', val: cloudFormData.r2PublicDomain },
-                          { key: 'VITE_R2_ACCESS_KEY_ID', val: cloudFormData.r2AccessKeyId },
-                          { key: 'VITE_R2_SECRET_ACCESS_KEY', val: cloudFormData.r2SecretAccessKey },
-                          { key: 'NODE_VERSION', val: '20' },
-                        ].map((row) => (
-                          <tr key={row.key} className="hover:bg-slate-50 dark:hover:bg-[#181818]">
-                            <td className="p-2.5 text-emerald-700 dark:text-[#3ecf8e] font-semibold">{row.key}</td>
-                            <td className="p-2.5 text-slate-700 dark:text-[#bbb] max-w-xs truncate">{row.val}</td>
-                            <td className="p-2.5 text-right">
-                              <button
-                                type="button"
-                                onClick={() => handleCopyText(row.val, row.key, row.key)}
-                                className="text-[11px] text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"
-                              >
-                                {copiedField === row.key ? (
-                                  <Check className="w-3.5 h-3.5 text-[#3ecf8e] inline" />
-                                ) : (
-                                  <Copy className="w-3.5 h-3.5 inline" />
-                                )}
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* =================================================================== */}
-            {/* VIEW 6: CUSTOM DOMAIN & SSL CHECKLIST                               */}
-            {/* =================================================================== */}
-            {activeTabId === 'domain' && (
-              <div className="space-y-6 max-w-4xl animate-in fade-in">
-                <div className="rounded-[12px] bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#2e2e2e] p-5 sm:p-6 space-y-4 shadow-xs">
-                  <div className="border-b border-slate-100 dark:border-[#242424] pb-3">
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white font-sans">
-                      Pre-Launch Verification Checklist ({completedChecklistCount}/10 Done)
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-[#888] mt-0.5">
-                      Verify all critical database, media storage, and security configurations.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    {checklistItems.map((item) => {
-                      const isChecked = Boolean(checklist[item.id]);
-                      return (
-                        <label
-                          key={item.id}
-                          className={cn(
-                            'flex items-center gap-2.5 p-2.5 rounded-[8px] border text-xs cursor-pointer select-none transition-colors',
-                            isChecked
-                              ? 'bg-emerald-50/50 dark:bg-[#1a261f] border-emerald-300 dark:border-emerald-800/40 text-slate-900 dark:text-white'
-                              : 'bg-white dark:bg-[#121212] border-slate-200 dark:border-[#242424] text-slate-600 dark:text-[#a1a1a1] hover:border-slate-300 dark:hover:border-[#383838]'
-                          )}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => toggleChecklistItem(item.id)}
-                            className="w-4 h-4 rounded text-[#3ecf8e] focus:ring-[#3ecf8e] accent-[#3ecf8e] cursor-pointer"
-                          />
-                          <span className={cn('font-sans', isChecked && 'font-medium')}>{item.title}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* =================================================================== */}
-            {/* VIEW 7: BRAND & IDENTITY STUDIO                                     */}
+            {/* VIEW 1: BRAND & IDENTITY STUDIO                                     */}
             {/* =================================================================== */}
             {activeTabId === 'brand' && (
               <div className="animate-in fade-in">
@@ -1925,7 +1160,16 @@ CREATE TABLE public.system_broadcasts (
             )}
 
             {/* =================================================================== */}
-            {/* VIEW 8: GLOBAL BROADCAST COMPOSER                                   */}
+            {/* VIEW 2: THERMAL SLIP & PRINTER CUSTOMIZER                           */}
+            {/* =================================================================== */}
+            {activeTabId === 'print' && (
+              <div className="animate-in fade-in">
+                <ThermalPrinterCustomizer />
+              </div>
+            )}
+
+            {/* =================================================================== */}
+            {/* VIEW 3: GLOBAL BROADCAST COMPOSER                                   */}
             {/* =================================================================== */}
             {activeTabId === 'broadcasts' && (
               <div className="max-w-3xl space-y-6 rounded-[12px] bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#2e2e2e] p-6 shadow-xs animate-in fade-in">
@@ -2022,7 +1266,7 @@ CREATE TABLE public.system_broadcasts (
             )}
 
             {/* =================================================================== */}
-            {/* VIEW 9: MASTER CATALOGUE DATA TABLES (GRID & DDL)                   */}
+            {/* VIEW 4: MASTER CATALOGUE DATA TABLES (GRID & DDL)                   */}
             {/* =================================================================== */}
             {isMasterDataTable && (
               <div className="space-y-4 animate-in fade-in">
@@ -2558,7 +1802,7 @@ CREATE TABLE public.system_broadcasts (
       {/* PERIOD LOCK AUDIT MODAL                                                   */}
       {/* ========================================================================= */}
       {lockModalOpen && targetPeriod && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/60 dark:bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
           <div className="relative w-full max-w-md rounded-[12px] bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#2e2e2e] p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
             <button
               type="button"

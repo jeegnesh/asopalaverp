@@ -102,19 +102,19 @@ export const MasterDataDrawer: React.FC<MasterDrawerProps> = ({
             setFormData({
               branch_name: '',
               branch_code: '',
-              city: 'Ahmedabad',
-              state: 'Gujarat',
-              gstin: '24ABVFA8046N1ZQ',
-              min_cash_threshold: 3000,
-              max_cash_ceiling: 25000,
-              max_upi_ceiling: 50000,
+              city: '',
+              state: '',
+              gstin: '',
+              min_cash_threshold: 0,
+              max_cash_ceiling: 0,
+              max_upi_ceiling: 0,
               is_active: true,
             });
             break;
           case 'category':
             setFormData({
               category_name: '',
-              color_theme: 'General Expenses',
+              color_theme: '',
               is_active: true,
             });
             break;
@@ -130,7 +130,7 @@ export const MasterDataDrawer: React.FC<MasterDrawerProps> = ({
             setFormData({
               partner_name: '',
               partner_code: '',
-              contact_phone: '+91 ',
+              contact_phone: '',
               tracking_url_template: '',
               is_active: true,
             });
@@ -458,10 +458,10 @@ export const MasterDataDrawer: React.FC<MasterDrawerProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title={drawerTitle}
-      size="full"
+      size="xl"
       footer={drawerFooter}
     >
-      <div className="max-w-4xl mx-auto w-full space-y-4 font-sans text-xs">
+      <div className="w-full space-y-4 font-sans text-xs">
         {/* Navigation Tabs (if Developer) */}
         {isDeveloper && (
           <div className="flex items-center gap-1 p-0.5 rounded-[6px] bg-slate-100 dark:bg-[#141414] border border-slate-200 dark:border-[#282828] mb-4">
@@ -576,8 +576,9 @@ export const MasterDataDrawer: React.FC<MasterDrawerProps> = ({
                 <SupabaseFieldRow columnName="min_cash_threshold" dataType="numeric" description="Minimum cash float maintained in showroom drawer">
                   <input
                     type="number"
-                    value={formData.min_cash_threshold ?? 3000}
-                    onChange={(e) => handleChange('min_cash_threshold', Number(e.target.value))}
+                    value={formData.min_cash_threshold ?? ''}
+                    onChange={(e) => handleChange('min_cash_threshold', e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="e.g. 3000"
                     className={inputStyles}
                   />
                 </SupabaseFieldRow>
@@ -585,8 +586,9 @@ export const MasterDataDrawer: React.FC<MasterDrawerProps> = ({
                 <SupabaseFieldRow columnName="max_cash_ceiling" dataType="numeric" description="Trigger for safe-drop to main vault">
                   <input
                     type="number"
-                    value={formData.max_cash_ceiling ?? 25000}
-                    onChange={(e) => handleChange('max_cash_ceiling', Number(e.target.value))}
+                    value={formData.max_cash_ceiling ?? ''}
+                    onChange={(e) => handleChange('max_cash_ceiling', e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="e.g. 25000"
                     className={inputStyles}
                   />
                 </SupabaseFieldRow>
@@ -1036,9 +1038,8 @@ export const MasterDataDrawer: React.FC<MasterDrawerProps> = ({
                   <SearchableSelect
                     options={branches.map((b) => ({
                       value: b.branch_id,
-                      label: b.branch_name,
-                      sublabel: b.branch_id,
-                      badge: b.branch_code,
+                      label: b.branch_code,
+                      sublabel: b.branch_name.replace(/^Asopalav\s*-\s*/i, ''),
                     }))}
                     value={formData.branch_id || ''}
                     onChange={async (bId) => {

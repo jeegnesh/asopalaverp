@@ -60,6 +60,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onOpenKeyboardHelp }) => {
   const { isCeilingExceededAllowed } = useOverrideStore();
 
   const [cashBalance, setCashBalance] = useState(0);
+  const [upiBalance, setUpiBalance] = useState(0);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -105,6 +106,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onOpenKeyboardHelp }) => {
     try {
       const w = await erpService.getBranchWallet(activeBranch.branch_id);
       setCashBalance(w.cash_balance);
+      setUpiBalance(w.upi_balance);
     } catch {
       // Ignore
     }
@@ -157,27 +159,9 @@ export const Topbar: React.FC<TopbarProps> = ({ onOpenKeyboardHelp }) => {
             <Menu className="w-5 h-5 stroke-[2]" />
           </button>
 
-          {/* Company Brand Logo & Breadcrumb */}
-          <div className="flex items-center gap-2 min-w-0 select-none">
-            <button
-              type="button"
-              onClick={() => {
-                triggerHaptic('selection');
-                setActivePage('dashboard');
-              }}
-              className="flex items-center min-w-0 cursor-pointer group text-left border-0 bg-transparent p-0"
-              title={`${brandName} ERP - Dashboard`}
-            >
-              <span className="text-sm font-medium text-slate-900 dark:text-white tracking-tight truncate font-sans group-hover:text-emerald-600 dark:group-hover:text-[#3ecf8e] transition-colors">
-                {brandName}
-              </span>
-            </button>
-
-            <span className="text-slate-300 dark:text-[#383838] font-mono text-xs shrink-0">
-              /
-            </span>
-
-            <span className="text-xs font-medium text-slate-700 dark:text-[#EDEDED] truncate font-sans">
+          {/* Active Page Name */}
+          <div className="flex items-center min-w-0 select-none">
+            <span className="text-sm font-semibold text-slate-900 dark:text-white truncate font-sans tracking-tight">
               {activePage === 'dashboard'
                 ? 'Dashboard'
                 : activePage === 'new-voucher'
@@ -211,7 +195,21 @@ export const Topbar: React.FC<TopbarProps> = ({ onOpenKeyboardHelp }) => {
         {/* SECTION 2 (RIGHT): SEARCH & OPERATIONAL UTILITY CONTROLS                   */}
         {/* ========================================================================= */}
         <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-          {/* 1. Global Search Trigger */}
+          {/* 1A. Mobile Only: Search Icon Button */}
+          <button
+            type="button"
+            onClick={() => {
+              triggerHaptic('selection');
+              setSearchOpen(true);
+            }}
+            aria-label="Search"
+            className="sm:hidden flex items-center justify-center w-8 h-8 rounded-full border border-slate-200 dark:border-[#282828] bg-slate-50/80 dark:bg-[#181818] hover:bg-slate-100 dark:hover:bg-[#222222] hover:border-slate-300 dark:hover:border-[#383838] text-slate-600 dark:text-[#a1a1a1] hover:text-slate-900 dark:hover:text-white transition-all cursor-pointer active:scale-95 shadow-2xs"
+            title="Search"
+          >
+            <Search className="w-3.5 h-3.5 stroke-[2]" />
+          </button>
+
+          {/* 1B. Desktop / Tablet: Search Bar */}
           <button
             type="button"
             onClick={() => {
@@ -219,16 +217,17 @@ export const Topbar: React.FC<TopbarProps> = ({ onOpenKeyboardHelp }) => {
               setSearchOpen(true);
             }}
             aria-label="Global Project Search"
-            className="flex items-center justify-between h-[34px] px-2.5 sm:px-3 w-32 sm:w-44 md:w-52 lg:w-60 bg-slate-50 dark:bg-[#1a1a1a] hover:bg-slate-100 dark:hover:bg-[#202020] border border-slate-200 dark:border-[#2e2e2e] hover:border-slate-300 dark:hover:border-[#383838] rounded-[6px] text-xs text-slate-500 dark:text-[#a1a1a1] hover:text-slate-800 dark:hover:text-white transition-colors cursor-pointer group shadow-2xs select-none"
+            className="hidden sm:flex items-center justify-between h-[34px] px-3 w-44 md:w-52 lg:w-60 bg-slate-50 dark:bg-[#1a1a1a] hover:bg-slate-100 dark:hover:bg-[#202020] border border-slate-200 dark:border-[#2e2e2e] hover:border-slate-300 dark:hover:border-[#383838] rounded-[6px] text-xs text-slate-500 dark:text-[#a1a1a1] hover:text-slate-800 dark:hover:text-white transition-colors cursor-pointer group shadow-2xs select-none"
             title="Search expenses, staff, receipts & cash..."
           >
             <div className="flex items-center gap-2 min-w-0">
               <Search className="w-3.5 h-3.5 text-slate-400 dark:text-[#707070] group-hover:text-slate-700 dark:group-hover:text-zinc-200 transition-colors shrink-0 stroke-[1.8]" />
               <span className="truncate text-xs font-sans">Search expenses, staff...</span>
             </div>
+            <Kbd className="hidden lg:inline-flex">Ctrl K</Kbd>
           </button>
 
-          {/* 2. Cash Box Balance Pill */}
+          {/* 2A. Cash Box Balance Pill */}
           <button
             type="button"
             onClick={() => {
@@ -251,9 +250,27 @@ export const Topbar: React.FC<TopbarProps> = ({ onOpenKeyboardHelp }) => {
               )}
             />
             <Wallet className="w-3.5 h-3.5 text-slate-400 dark:text-[#707070] shrink-0 stroke-[1.8]" />
-            <span className="text-[11px] text-slate-400 dark:text-[#707070] font-sans">Cash Box:</span>
-            <strong className="font-medium tabular-nums text-xs">
+            <span className="text-[11px] text-slate-400 dark:text-[#707070] font-sans">Cash:</span>
+            <strong className="font-medium tabular-nums text-xs text-emerald-600 dark:text-[#3ecf8e]">
               <AnimatedCounter value={cashBalance} isCurrency />
+            </strong>
+          </button>
+
+          {/* 2B. Bank UPI Balance Pill */}
+          <button
+            type="button"
+            onClick={() => {
+              triggerHaptic('selection');
+              setActivePage('treasury');
+            }}
+            aria-label={`UPI Balance: ₹${upiBalance.toLocaleString('en-IN')}`}
+            className="hidden md:flex items-center gap-1.5 h-[34px] px-2.5 rounded-[6px] border border-slate-200 dark:border-[#2e2e2e] bg-slate-50 dark:bg-[#1a1a1a] text-slate-800 dark:text-[#ededed] hover:border-slate-300 dark:hover:border-[#383838] hover:bg-slate-100 dark:hover:bg-[#202020] text-xs font-mono transition-colors shadow-2xs cursor-pointer select-none"
+            title="Bank UPI account balance (Click to manage)"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-sky-500 shrink-0" />
+            <span className="text-[11px] text-slate-400 dark:text-[#707070] font-sans">UPI:</span>
+            <strong className="font-medium tabular-nums text-xs text-sky-500 dark:text-sky-400">
+              <AnimatedCounter value={upiBalance} isCurrency />
             </strong>
           </button>
 
@@ -311,7 +328,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onOpenKeyboardHelp }) => {
             </button>
           )}
 
-          {/* 5. User Profile Avatar Pill & Menu */}
+          {/* 5. User Profile Avatar & Menu */}
           <div className="relative" ref={userMenuRef}>
             <button
               type="button"
@@ -322,12 +339,13 @@ export const Topbar: React.FC<TopbarProps> = ({ onOpenKeyboardHelp }) => {
               aria-label={`User Menu: ${userFullName}`}
               aria-expanded={isUserMenuOpen}
               className={cn(
-                'flex items-center gap-1.5 h-[34px] pl-1 pr-2 sm:pr-2.5 rounded-full border transition-all cursor-pointer shadow-2xs select-none',
+                'flex items-center gap-2 h-8 rounded-full transition-all cursor-pointer select-none',
+                'p-0.5 sm:pl-1 sm:pr-2.5 sm:border',
                 isUserMenuOpen
-                  ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-[#3ecf8e]'
-                  : 'border-slate-200 dark:border-[#2e2e2e] bg-slate-50 dark:bg-[#1a1a1a] hover:border-slate-300 dark:hover:border-[#383838] hover:bg-slate-100 dark:hover:bg-[#222]'
+                  ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-[#3ecf8e] ring-2 ring-[#3ecf8e]/20'
+                  : 'border-transparent sm:border-slate-200 sm:dark:border-[#282828] sm:bg-slate-50/80 sm:dark:bg-[#181818] hover:border-slate-300 dark:hover:border-[#383838] hover:bg-slate-100 dark:hover:bg-[#222222]'
               )}
-              title={`${userFullName} (${user?.role_code || 'Super Admin'}) - Click for Profile, Notifications & Theme`}
+              title={`${userFullName} (${user?.role_code || 'Super Admin'}) - Profile & Settings`}
             >
               {/* Avatar Photo / Initials with optional unread indicator */}
               <div className="relative shrink-0">
@@ -335,10 +353,10 @@ export const Topbar: React.FC<TopbarProps> = ({ onOpenKeyboardHelp }) => {
                   <img
                     src={user.avatar_url}
                     alt={userFullName}
-                    className="w-6 h-6 rounded-full object-cover border border-emerald-500/40 shrink-0"
+                    className="w-7 h-7 sm:w-6 sm:h-6 rounded-full object-cover border border-emerald-500/30 shrink-0 shadow-2xs"
                   />
                 ) : (
-                  <div className="w-6 h-6 rounded-full bg-emerald-600 text-white font-mono font-bold text-[10px] flex items-center justify-center shrink-0 shadow-xs">
+                  <div className="w-7 h-7 sm:w-6 sm:h-6 rounded-full bg-emerald-600 text-white font-mono font-bold text-[10px] flex items-center justify-center shrink-0 shadow-2xs">
                     {userInitials}
                   </div>
                 )}
@@ -347,13 +365,13 @@ export const Topbar: React.FC<TopbarProps> = ({ onOpenKeyboardHelp }) => {
                 )}
               </div>
 
-              <span className="hidden md:inline-block text-xs font-medium text-slate-800 dark:text-zinc-200 max-w-[100px] truncate font-sans">
+              <span className="hidden sm:inline-block text-xs font-medium text-slate-800 dark:text-zinc-200 max-w-[100px] truncate font-sans">
                 {user?.first_name || 'Admin'}
               </span>
 
               <ChevronDown
                 className={cn(
-                  'w-3 h-3 text-slate-400 dark:text-[#707070] transition-transform duration-150',
+                  'hidden sm:inline-block w-3 h-3 text-slate-400 dark:text-[#707070] transition-transform duration-150',
                   isUserMenuOpen && 'rotate-180 text-emerald-600 dark:text-[#3ecf8e]'
                 )}
               />

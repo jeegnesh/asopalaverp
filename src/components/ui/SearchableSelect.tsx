@@ -285,9 +285,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
         {isOpen && (
           <div
             className={cn(
-              'absolute top-full mt-1.5 z-50 rounded-[8px] bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#2e2e2e] shadow-2xl overflow-hidden min-w-[200px]',
-              align === 'right' ? 'right-0' : 'left-0',
-              !className?.includes('w-') && 'w-full',
+              'absolute top-full mt-1.5 z-50 rounded-[8px] bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#2e2e2e] shadow-2xl overflow-hidden w-full min-w-full left-0 right-0',
               popupClassName
             )}
           >
@@ -353,20 +351,14 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
                           : 'text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-[#202020] hover:text-slate-900 dark:hover:text-white'
                       )}
                     >
-                      <div className="flex items-center gap-2 truncate pr-2">
-                        <div
-                          className={cn(
-                            'w-3.5 h-3.5 rounded-[3px] border flex items-center justify-center shrink-0 transition-colors',
-                            isSelected
-                              ? 'border-[#3ecf8e] bg-[#3ecf8e] text-[#171717]'
-                              : 'border-slate-300 dark:border-[#383838] bg-white dark:bg-[#141414]'
-                          )}
-                        >
-                          {isSelected && <Check className="w-2.5 h-2.5 text-[#171717] stroke-[3]" />}
-                        </div>
-
-                        <div className="truncate">
-                          <div className="truncate">{opt.label}</div>
+                      <div className="flex items-center gap-2 truncate pr-2 flex-1 min-w-0">
+                        {opt.icon && (
+                          <opt.icon className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-500 shrink-0" />
+                        )}
+                        <div className="truncate flex-1 min-w-0">
+                          <div className={cn("truncate font-sans", isSelected ? "font-semibold text-[#3ecf8e]" : "")}>
+                            {opt.label}
+                          </div>
                           {sub && (
                             <div className="text-[10px] text-slate-500 dark:text-zinc-400 font-mono truncate">
                               {sub}
@@ -375,11 +367,14 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="flex items-center gap-1.5 shrink-0 ml-1.5">
                         {opt.badge && (
-                          <span className="px-1.5 py-0.2 rounded-[4px] text-[10px] font-mono bg-black/5 dark:bg-white/10 text-slate-600 dark:text-[#a1a1a1] border border-black/10 dark:border-white/10">
+                          <span className="px-1.5 py-0.2 rounded-[4px] text-[10px] font-mono bg-black/5 dark:bg-white/10 text-slate-600 dark:text-[#a1a1a1] border border-black/10 dark:border-white/10 whitespace-nowrap">
                             {opt.badge}
                           </span>
+                        )}
+                        {isSelected && (
+                          <Check className="w-3.5 h-3.5 text-[#3ecf8e] stroke-[2.5]" />
                         )}
                       </div>
                     </div>

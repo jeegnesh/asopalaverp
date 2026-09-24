@@ -4,6 +4,8 @@ import { Branch, BranchWallet, DrawerSession } from '@/types/database';
 import { DEFAULT_BRANCHES, normalizeBranchCode, normalizeBranchId } from '@/lib/utils';
 import { showToast } from '@/components/ui/ToastContainer';
 
+import { useAuthStore } from '@/store/authStore';
+
 interface BranchState {
   selectedBranchId: string; // 'Aellp-ASI', 'Aellp-AP', 'ASM', etc.
   branches: Branch[];
@@ -41,7 +43,22 @@ export const useBranchStore = create<BranchState>((set, get) => ({
   loading: false,
 
   setSelectedBranchId: (id) => {
+    const authState = useAuthStore.getState();
     const canonicalId = id === 'ALL' ? 'ALL' : normalizeBranchId(id);
+
+    // Security boundary: If user is logged in and not authorized for this branch, block and fallback
+    if (authState.user && !authState.isBranchAllowed(canonicalId)) {
+      const allowed = authState.getAllowedBranches(get().branches);
+      const fallbackId = allowed[0]?.branch_id || 'Aellp-ASI';
+      set({ selectedBranchId: fallbackId });
+      showToast({
+        type: 'warning',
+        title: 'Access Restricted',
+        message: 'You are only authorized to access your assigned showroom terminal.',
+      });
+      return;
+    }
+
     const prev = get().selectedBranchId;
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);

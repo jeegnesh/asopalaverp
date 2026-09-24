@@ -23,12 +23,12 @@ export interface SlideOverDrawerProps {
 }
 
 const sizeClasses: Record<DrawerSize, string> = {
-  sm: 'max-w-md',        // 448px
-  md: 'max-w-xl',        // 576px
-  lg: 'max-w-3xl',       // 768px
-  xl: 'max-w-5xl',       // 1024px
-  '2xl': 'max-w-7xl',     // 1280px
-  full: 'w-full max-w-full', // Full Screen 100vw x 100vh
+  sm: 'max-w-md',
+  md: 'max-w-xl',
+  lg: 'max-w-2xl sm:max-w-3xl', // Standard comfortable slide-over drawer
+  xl: 'max-w-3xl sm:max-w-4xl',
+  '2xl': 'max-w-5xl',
+  full: 'w-full max-w-full',
 };
 
 export const SlideOverDrawer: React.FC<SlideOverDrawerProps> = ({
@@ -38,7 +38,7 @@ export const SlideOverDrawer: React.FC<SlideOverDrawerProps> = ({
   subtitle,
   badge,
   copyId,
-  size = 'full',
+  size = 'lg',
   allowExpand = true,
   contentClassName,
   headerExtra,
@@ -47,7 +47,7 @@ export const SlideOverDrawer: React.FC<SlideOverDrawerProps> = ({
 }) => {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const backdropRef = useRef<HTMLDivElement | null>(null);
-  const [isCompact, setIsCompact] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -78,7 +78,7 @@ export const SlideOverDrawer: React.FC<SlideOverDrawerProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      setIsCompact(false);
+      setIsExpanded(false);
       animateDrawerOpen(panelRef.current, backdropRef.current);
     }
   }, [isOpen]);
@@ -92,15 +92,15 @@ export const SlideOverDrawer: React.FC<SlideOverDrawerProps> = ({
 
   if (!isOpen || !mounted) return null;
 
-  // Determine current width class: default full screen unless user toggled compact
-  const currentSizeClass = isCompact ? 'max-w-4xl border-l' : (sizeClasses[size] || sizeClasses.full);
+  // Determine current width class: full screen if user toggled expand, otherwise standard drawer size
+  const currentSizeClass = isExpanded ? 'w-full max-w-full' : (sizeClasses[size] || sizeClasses.full);
 
   const drawerContent = (
     <div className="fixed inset-0 z-[99999] w-screen h-screen overflow-hidden select-none font-sans flex justify-end">
       {/* Backdrop */}
       <div
         ref={backdropRef}
-        className="fixed inset-0 w-screen h-screen bg-black/60 dark:bg-black/75 transition-opacity backdrop-blur-[2px] z-0"
+        className="fixed inset-0 w-screen h-screen bg-black/60 dark:bg-black/75 transition-opacity backdrop-blur-md z-0"
         onClick={handleClose}
       />
 
@@ -109,7 +109,7 @@ export const SlideOverDrawer: React.FC<SlideOverDrawerProps> = ({
         <div
           ref={panelRef}
           className={cn(
-            'w-full h-full pointer-events-auto bg-white dark:bg-[#141414] border-l border-slate-200 dark:border-[#222222] shadow-2xl flex flex-col overflow-hidden text-slate-900 dark:text-zinc-100 transition-[max-width] duration-200 ease-out',
+            'w-full h-full pointer-events-auto bg-white dark:bg-[#141414] border-l border-slate-200 dark:border-[#222222] shadow-2xl flex flex-col overflow-hidden text-slate-900 dark:text-zinc-100 transition-all duration-300 ease-in-out',
             currentSizeClass
           )}
         >
@@ -164,15 +164,15 @@ export const SlideOverDrawer: React.FC<SlideOverDrawerProps> = ({
               {allowExpand && (
                 <button
                   type="button"
-                  onClick={() => setIsCompact(!isCompact)}
-                  aria-label={isCompact ? 'Expand to full screen' : 'Collapse to side drawer'}
-                  title={isCompact ? 'Expand to full screen' : 'Collapse to side drawer'}
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  aria-label={isExpanded ? 'Collapse to side drawer' : 'Expand to full screen'}
+                  title={isExpanded ? 'Collapse to side drawer' : 'Expand to full screen'}
                   className="p-1.5 rounded-[6px] text-slate-400 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#242424] transition-colors cursor-pointer hidden sm:inline-flex"
                 >
-                  {isCompact ? (
-                    <Maximize2 className="w-3.5 h-3.5" />
-                  ) : (
+                  {isExpanded ? (
                     <Minimize2 className="w-3.5 h-3.5" />
+                  ) : (
+                    <Maximize2 className="w-3.5 h-3.5" />
                   )}
                 </button>
               )}

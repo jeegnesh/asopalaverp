@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useUIStore } from '@/store/uiStore';
 import { useBranchStore } from '@/store/branchStore';
+import { useAuthStore } from '@/store/authStore';
+import { Branch } from '@/types/database';
 import { searchEngine, SearchResultItem, SearchCategory, SearchFilterOptions, SearchQueryResult } from '@/lib/searchEngine';
 import { formatINR, formatDate, cn, triggerHaptic } from '@/lib/utils';
 import { showToast } from '@/components/ui/ToastContainer';
@@ -44,10 +46,14 @@ export const UniversalSearchPage: React.FC = () => {
   const { setActivePage, openDrawer, setSettleTargetAdvance, openLightbox } = useUIStore();
   const { branches, selectedBranchId, setSelectedBranchId, getActiveBranch } = useBranchStore();
 
+  const { user, can, getAllowedBranches } = useAuthStore();
+  const allowedBranches = getAllowedBranches(branches);
+  const canViewAll = user?.role_code === 'Super_Admin' || user?.role_code === 'Developer' || can('can_view_all_branches');
+
   // Search Query & Filters State
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<SearchCategory>('all');
-  const [branchFilter, setBranchFilter] = useState<string>(selectedBranchId || 'ALL');
+  const [branchFilter, setBranchFilter] = useState<string>(canViewAll ? (selectedBranchId || 'ALL') : (allowedBranches[0]?.branch_id || 'Aellp-ASI'));
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<DateFilterChip>('all');
   const [amountFilter, setAmountFilter] = useState<AmountFilterChip>('all');
@@ -584,11 +590,11 @@ export const UniversalSearchPage: React.FC = () => {
               <SearchableSelect
                 size="sm"
                 options={[
-                  { value: 'ALL', label: 'All Showrooms' },
-                  ...branches.map((b) => ({
+                  ...(canViewAll ? [{ value: 'ALL', label: 'All Showrooms' }] : []),
+                  ...allowedBranches.map((b: Branch) => ({
                     value: b.branch_id,
-                    label: b.branch_name,
-                    badge: b.branch_code,
+                    label: b.branch_code,
+                    sublabel: b.branch_name.replace(/^Asopalav\s*-\s*/i, ''),
                   })),
                 ]}
                 value={branchFilter}

@@ -477,28 +477,42 @@ export const useAuthStore = create<AuthState>((set, get) => {
     },
 
     isBranchAllowed: (branchId: string) => {
-      const { user } = get();
+      const { user, can } = get();
       if (!user) return false;
-      if (user.role_code === 'Super_Admin' || user.role_code === 'Developer') return true;
-      if (!user.assigned_branches || user.assigned_branches.includes('*') || user.assigned_branches.length === 0) return true;
+      const isSuper = user.role_code === 'Super_Admin' || user.role_code === 'Developer' || can('can_view_all_branches');
+      if (branchId === 'ALL') return isSuper;
+      if (isSuper) return true;
+
+      const assigned = user.assigned_branches && user.assigned_branches.length > 0
+        ? user.assigned_branches
+        : ['Aellp-ASI'];
+
+      if (assigned.includes('*')) return isSuper;
+
       const targetCode = normalizeBranchCode(branchId);
-      return user.assigned_branches.some(
-        (b) => b === '*' || b === branchId || normalizeBranchCode(b) === targetCode
+      return assigned.some(
+        (b) => b === branchId || normalizeBranchCode(b) === targetCode
       );
     },
 
     getAllowedBranches: (allBranches: Branch[]) => {
-      const { user } = get();
+      const { user, can } = get();
       const list = allBranches && allBranches.length > 0 ? allBranches : DEFAULT_BRANCHES;
-      if (!user) return list;
-      if (user.role_code === 'Super_Admin' || user.role_code === 'Developer') return list;
-      if (!user.assigned_branches || user.assigned_branches.includes('*') || user.assigned_branches.length === 0) return list;
-      return list.filter((b) => {
+      if (!user) return [list[0]];
+      const isSuper = user.role_code === 'Super_Admin' || user.role_code === 'Developer' || can('can_view_all_branches');
+      if (isSuper) return list;
+
+      const assigned = user.assigned_branches && user.assigned_branches.length > 0
+        ? user.assigned_branches
+        : ['Aellp-ASI'];
+
+      const filtered = list.filter((b) => {
         const bCode = normalizeBranchCode(b.branch_code || b.branch_id);
-        return user.assigned_branches.some(
-          (ub) => ub === '*' || ub === b.branch_id || normalizeBranchCode(ub) === bCode
+        return assigned.some(
+          (ub) => ub === b.branch_id || normalizeBranchCode(ub) === bCode
         );
       });
+      return filtered.length > 0 ? filtered : [list[0]];
     },
   };
 });

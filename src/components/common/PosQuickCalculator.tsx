@@ -37,8 +37,8 @@ export const PosQuickCalculator: React.FC = () => {
   const [copied, setCopied] = useState(false);
 
   // Cash Tender / Change Return Mode State
-  const [tenderAmount, setTenderAmount] = useState<string>('2000');
-  const [billAmount, setBillAmount] = useState<string>('640');
+  const [tenderAmount, setTenderAmount] = useState<string>('');
+  const [billAmount, setBillAmount] = useState<string>('');
 
   const modalRef = useRef<HTMLDivElement | null>(null);
   const backdropRef = useRef<HTMLDivElement | null>(null);
@@ -256,7 +256,7 @@ export const PosQuickCalculator: React.FC = () => {
       <div
         ref={backdropRef}
         onClick={handleClose}
-        className="fixed inset-0 bg-black/75 backdrop-blur-xs transition-opacity duration-200"
+        className="fixed inset-0 bg-black/60 dark:bg-black/75 backdrop-blur-md transition-opacity duration-200"
       />
 
       {/* Modal Dialog */}
@@ -488,7 +488,7 @@ export const PosQuickCalculator: React.FC = () => {
                   type="number"
                   value={tenderAmount}
                   onChange={(e) => setTenderAmount(e.target.value)}
-                  placeholder="2000"
+                  placeholder="e.g. 2000"
                   className="w-full h-10 px-3 bg-slate-50 dark:bg-[#171717] border border-slate-200 dark:border-[#282828] rounded-[6px] text-base font-mono font-medium text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 dark:focus:border-[#3ecf8e] tabular-nums"
                 />
                 <div className="absolute right-2 top-2 flex items-center gap-1">
@@ -496,12 +496,21 @@ export const PosQuickCalculator: React.FC = () => {
                     <button
                       key={t}
                       type="button"
-                      onClick={() => setTenderAmount(String(t))}
-                      className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-slate-200 dark:bg-[#222] hover:bg-emerald-500/10 hover:text-emerald-600 text-slate-700 dark:text-zinc-300 cursor-pointer"
+                      onClick={() => setTenderAmount(String((Number(tenderAmount) || 0) + t))}
+                      className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-slate-200 dark:bg-[#222] hover:bg-emerald-500/10 hover:text-emerald-600 text-slate-700 dark:text-zinc-300 cursor-pointer transition-colors active:scale-95"
                     >
-                      ₹{t}
+                      +₹{t >= 1000 ? `${t / 1000}k` : t}
                     </button>
                   ))}
+                  {tenderAmount !== '' && Number(tenderAmount) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setTenderAmount('')}
+                      className="px-1.5 py-0.5 text-[10px] font-mono rounded text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 cursor-pointer"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -516,7 +525,7 @@ export const PosQuickCalculator: React.FC = () => {
                 type="number"
                 value={billAmount}
                 onChange={(e) => setBillAmount(e.target.value)}
-                placeholder="640"
+                placeholder="e.g. 640"
                 className="w-full h-10 px-3 bg-slate-50 dark:bg-[#171717] border border-slate-200 dark:border-[#282828] rounded-[6px] text-base font-mono font-medium text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 dark:focus:border-[#3ecf8e] tabular-nums"
               />
             </div>

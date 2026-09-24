@@ -282,7 +282,7 @@ export const VoucherTable: React.FC<VoucherTableProps> = ({
 
   const departmentSelectOptions = useMemo(() => [
     { value: 'ALL', label: `All Departments (${departments.length})` },
-    ...departments.map((d) => ({ value: d.department_name, label: d.department_name, badge: d.department_code })),
+    ...departments.map((d) => ({ value: d.department_name, label: d.department_name })),
   ], [departments]);
 
   const paymentModeSelectOptions = useMemo(() => [
@@ -1328,7 +1328,7 @@ export const VoucherTable: React.FC<VoucherTableProps> = ({
         <div className="lg:hidden">
           <div
             onClick={() => setIsFilterOpen(false)}
-            className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 transition-opacity animate-in fade-in duration-200"
+            className="fixed inset-0 bg-black/60 dark:bg-black/75 backdrop-blur-md z-50 transition-opacity animate-in fade-in duration-200"
           />
 
           <div className="fixed inset-x-0 bottom-0 max-h-[88vh] rounded-t-[28px] bg-white dark:bg-[#181818] border-t border-slate-200/90 dark:border-[#2e2e2e] shadow-2xl z-50 font-sans p-5 sm:p-6 pb-8 overflow-y-auto overscroll-contain space-y-5 animate-in slide-in-from-bottom duration-250">

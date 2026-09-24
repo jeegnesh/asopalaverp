@@ -26,6 +26,7 @@ import {
   Keyboard,
   Clock,
   Calculator,
+  Store,
 } from 'lucide-react';
 import {
   AppTableIcon,
@@ -79,6 +80,8 @@ export const Sidebar: React.FC = () => {
 
   const allowedBranches = getAllowedBranches(branches);
   const activeBranch = getActiveBranch();
+  const canViewAll = user?.role_code === 'Super_Admin' || user?.role_code === 'Developer' || can('can_view_all_branches');
+  const isBranchSwitcherEnabled = canViewAll || allowedBranches.length > 1;
 
   const filteredBranches = allowedBranches.filter(
     (b) =>
@@ -248,13 +251,21 @@ export const Sidebar: React.FC = () => {
           <div className="relative w-full" ref={dropdownRef}>
             <button
               type="button"
-              onClick={() => setIsBranchDropdownOpen(!isBranchDropdownOpen)}
+              onClick={() => {
+                if (isBranchSwitcherEnabled) {
+                  setIsBranchDropdownOpen(!isBranchDropdownOpen);
+                }
+              }}
+              disabled={!isBranchSwitcherEnabled}
               aria-label={`Current active showroom: ${currentTitle}`}
-              className="w-full flex items-center justify-between p-1.5 rounded-[6px] hover:bg-[#f4f4f5] dark:hover:bg-[#1f1f1f] border border-transparent transition-all text-left group cursor-pointer"
+              className={cn(
+                "w-full flex items-center justify-between p-1.5 rounded-[6px] border border-transparent transition-all text-left group",
+                isBranchSwitcherEnabled ? "hover:bg-[#f4f4f5] dark:hover:bg-[#1f1f1f] cursor-pointer" : "cursor-default opacity-95"
+              )}
             >
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-7 h-7 rounded-[6px] bg-[#007a4d] text-white flex items-center justify-center font-mono font-medium text-xs tracking-tight shrink-0 shadow-xs">
-                  {currentBadgeCode}
+                <div className="w-7 h-7 rounded-[6px] bg-emerald-500/10 dark:bg-[#3ecf8e]/10 border border-emerald-500/20 dark:border-[#3ecf8e]/20 text-emerald-600 dark:text-[#3ecf8e] flex items-center justify-center shrink-0 shadow-xs">
+                  <Store className="w-3.5 h-3.5" />
                 </div>
                 <div className="truncate min-w-0">
                   <p className="text-xs font-medium text-[#171717] dark:text-[#ededed] tracking-[-0.2px] truncate leading-tight font-sans">
@@ -265,16 +276,18 @@ export const Sidebar: React.FC = () => {
                   </p>
                 </div>
               </div>
-              <ChevronsUpDown
-                className={cn(
-                  'w-3.5 h-3.5 text-[#707070] group-hover:text-[#171717] dark:group-hover:text-white transition-transform duration-200 shrink-0 ml-1',
-                  isBranchDropdownOpen && 'rotate-180 text-[#171717] dark:text-white'
-                )}
-              />
+              {isBranchSwitcherEnabled && (
+                <ChevronsUpDown
+                  className={cn(
+                    'w-3.5 h-3.5 text-[#707070] group-hover:text-[#171717] dark:group-hover:text-white transition-transform duration-200 shrink-0 ml-1',
+                    isBranchDropdownOpen && 'rotate-180 text-[#171717] dark:text-white'
+                  )}
+                />
+              )}
             </button>
 
             {/* Branch Switcher Popup */}
-            {isBranchDropdownOpen && (
+            {isBranchDropdownOpen && isBranchSwitcherEnabled && (
               <div className="absolute left-0 right-0 top-full mt-1.5 z-50 rounded-[10px] bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] shadow-2xl overflow-hidden py-1 text-xs font-sans animate-in fade-in zoom-in-95 duration-100 min-w-[220px]">
                 <div className="px-2.5 py-1.5 border-b border-slate-200 dark:border-[#282828]">
                   <div className="flex items-center gap-2 text-slate-400">
@@ -291,39 +304,42 @@ export const Sidebar: React.FC = () => {
                 </div>
 
                 <div className="max-h-56 overflow-y-auto p-1 space-y-0.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedBranchId('ALL');
-                      setIsBranchDropdownOpen(false);
-                      setBranchSearch('');
-                    }}
-                    className={cn(
-                      'w-full flex items-center justify-between px-2 py-1.5 text-xs rounded-[6px] text-left transition-colors font-sans cursor-pointer',
-                      selectedBranchId === 'ALL'
-                        ? 'bg-slate-100 dark:bg-[#242424] text-slate-900 dark:text-white font-medium'
-                        : 'text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-[#202020]'
-                    )}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-6 h-6 rounded-[4px] bg-[#007a4d] text-white flex items-center justify-center font-medium text-[10px] font-mono shrink-0">
-                        ALL
-                      </div>
-                      <div className="truncate">
-                        <div className="font-medium text-[#171717] dark:text-[#ededed] tracking-[-0.2px] truncate leading-tight">
-                          All Showrooms
+                  {canViewAll && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedBranchId('ALL');
+                          setIsBranchDropdownOpen(false);
+                          setBranchSearch('');
+                        }}
+                        className={cn(
+                          'w-full flex items-center justify-between px-2 py-1.5 text-xs rounded-[6px] text-left transition-colors font-sans cursor-pointer',
+                          selectedBranchId === 'ALL'
+                            ? 'bg-slate-100 dark:bg-[#242424] text-slate-900 dark:text-white font-medium'
+                            : 'text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-[#202020]'
+                        )}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-6 h-6 rounded-[4px] bg-emerald-500/10 text-emerald-600 dark:text-[#3ecf8e] flex items-center justify-center shrink-0">
+                            <Store className="w-3.5 h-3.5" />
+                          </div>
+                          <div className="truncate">
+                            <div className="font-medium text-[#171717] dark:text-[#ededed] tracking-[-0.2px] truncate leading-tight">
+                              All Showrooms
+                            </div>
+                            <div className="text-[10px] text-[#707070] dark:text-[#a1a1a1] leading-tight">
+                              Combined View
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-[10px] text-[#707070] dark:text-[#a1a1a1] leading-tight">
-                          Combined View
-                        </div>
-                      </div>
-                    </div>
-                    {selectedBranchId === 'ALL' && (
-                      <Check className="w-3.5 h-3.5 text-[#3ecf8e] shrink-0 stroke-[2.5]" />
-                    )}
-                  </button>
-
-                  <div className="border-t border-slate-100 dark:border-[#282828] my-1" />
+                        {selectedBranchId === 'ALL' && (
+                          <Check className="w-3.5 h-3.5 text-[#3ecf8e] shrink-0 stroke-[2.5]" />
+                        )}
+                      </button>
+                      <div className="border-t border-slate-100 dark:border-[#282828] my-1" />
+                    </>
+                  )}
 
                   {filteredBranches.map((b) => {
                     const isSelected = b.branch_id === selectedBranchId;
@@ -344,8 +360,8 @@ export const Sidebar: React.FC = () => {
                         )}
                       >
                         <div className="flex items-center gap-2 min-w-0">
-                          <div className="w-6 h-6 rounded-[4px] bg-[#007a4d] text-white flex items-center justify-center font-medium text-[10px] font-mono shrink-0">
-                            {b.branch_code}
+                          <div className="w-6 h-6 rounded-[4px] bg-emerald-500/10 text-emerald-600 dark:text-[#3ecf8e] flex items-center justify-center shrink-0">
+                            <Store className="w-3.5 h-3.5" />
                           </div>
                           <div className="truncate">
                             <div className="font-medium text-[#171717] dark:text-[#ededed] tracking-[-0.2px] truncate leading-tight">
@@ -749,11 +765,11 @@ export const Sidebar: React.FC = () => {
           triggerHaptic('light');
           setMobileSidebarOpen(false);
         }}
-        className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity duration-200 animate-in fade-in"
+        className="fixed inset-0 bg-black/60 dark:bg-black/75 backdrop-blur-md transition-opacity duration-200 animate-in fade-in"
       />
 
-      {/* 2. Slide-In Sheet Container */}
-      <div className="relative w-[88vw] max-w-[360px] h-full bg-white dark:bg-[#141414] shadow-2xl flex flex-col overflow-hidden z-10 animate-in slide-in-from-left duration-200">
+      {/* 2. Slide-In Sheet Container (Full Screen on Mobile) */}
+      <div className="relative w-full max-w-full h-full bg-white dark:bg-[#141414] shadow-2xl flex flex-col overflow-hidden z-10 animate-in slide-in-from-left duration-200">
         {/* Drawer Header */}
         <div className="h-14 px-4 flex items-center justify-between border-b border-slate-200 dark:border-[#242424] bg-white dark:bg-[#171717] shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -761,14 +777,9 @@ export const Sidebar: React.FC = () => {
               <BrandLogo size={20} className="w-5 h-5 object-contain" />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="text-sm font-medium tracking-tight text-slate-900 dark:text-white font-sans truncate">
-                  {brandName} ERP
-                </span>
-                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-[4px] bg-emerald-500/10 text-emerald-600 dark:text-[#3ecf8e] border border-emerald-500/20 font-medium shrink-0">
-                  {currentBadgeCode}
-                </span>
-              </div>
+              <span className="text-sm font-semibold tracking-tight text-slate-900 dark:text-white font-sans truncate">
+                {brandName} ERP
+              </span>
             </div>
           </div>
 
@@ -780,7 +791,7 @@ export const Sidebar: React.FC = () => {
               setMobileSidebarOpen(false);
             }}
             aria-label="Close navigation menu"
-            className="w-8.5 h-8.5 rounded-full bg-slate-100 dark:bg-[#222222] hover:bg-slate-200 dark:hover:bg-[#2c2c2c] text-slate-700 dark:text-zinc-200 flex items-center justify-center transition-transform active:scale-90 cursor-pointer border border-slate-200/80 dark:border-[#2e2e2e]"
+            className="w-8 h-8 rounded-full bg-slate-100 dark:bg-[#222222] hover:bg-slate-200 dark:hover:bg-[#2c2c2c] text-slate-700 dark:text-zinc-200 flex items-center justify-center transition-transform active:scale-90 cursor-pointer border border-slate-200/80 dark:border-[#2e2e2e]"
           >
             <X className="w-4 h-4 stroke-[2]" />
           </button>
@@ -791,40 +802,48 @@ export const Sidebar: React.FC = () => {
           {/* SECTION A: ACTIVE SHOWROOM OUTLET SWITCHER */}
           <div className="space-y-1.5">
             <div className="text-[10px] font-mono font-medium uppercase tracking-wider text-slate-400 dark:text-zinc-500 px-1">
-              Active Showroom Outlet
+              Active Showroom
             </div>
             <div className="relative" ref={dropdownRef}>
               <button
                 type="button"
                 onClick={() => {
-                  triggerHaptic('selection');
-                  setIsBranchDropdownOpen(!isBranchDropdownOpen);
+                  if (isBranchSwitcherEnabled) {
+                    triggerHaptic('selection');
+                    setIsBranchDropdownOpen(!isBranchDropdownOpen);
+                  }
                 }}
-                className="w-full flex items-center justify-between p-2.5 rounded-[10px] bg-white dark:bg-[#1a1a1a] border border-slate-200/90 dark:border-[#282828] text-left transition-colors cursor-pointer shadow-xs active:scale-[0.99]"
+                disabled={!isBranchSwitcherEnabled}
+                className={cn(
+                  "w-full flex items-center justify-between p-2.5 rounded-[10px] bg-white dark:bg-[#1a1a1a] border border-slate-200/90 dark:border-[#282828] text-left transition-colors shadow-xs",
+                  isBranchSwitcherEnabled ? "cursor-pointer active:scale-[0.99]" : "cursor-default opacity-95"
+                )}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-[6px] bg-[#007a4d] text-white flex items-center justify-center font-mono font-medium text-xs shrink-0 shadow-2xs">
-                    {currentBadgeCode}
+                  <div className="w-8 h-8 rounded-[6px] bg-emerald-500/10 dark:bg-[#3ecf8e]/10 border border-emerald-500/20 dark:border-[#3ecf8e]/20 text-emerald-600 dark:text-[#3ecf8e] flex items-center justify-center shrink-0 shadow-2xs">
+                    <Store className="w-4 h-4" />
                   </div>
                   <div className="truncate">
-                    <span className="text-xs font-medium text-slate-900 dark:text-white block leading-tight font-sans truncate">
+                    <span className="text-xs font-semibold text-slate-900 dark:text-white block leading-tight font-sans truncate">
                       {currentTitle}
                     </span>
                     <span className="text-[10px] text-slate-500 dark:text-zinc-400 font-sans block mt-0.5">
-                      Tap to switch branch
+                      {isBranchSwitcherEnabled ? 'Tap to switch branch' : 'Assigned Showroom'}
                     </span>
                   </div>
                 </div>
-                <ChevronsUpDown
-                  className={cn(
-                    'w-4 h-4 text-slate-400 dark:text-zinc-400 shrink-0 transition-transform duration-200',
-                    isBranchDropdownOpen && 'rotate-180 text-slate-900 dark:text-white'
-                  )}
-                />
+                {isBranchSwitcherEnabled && (
+                  <ChevronsUpDown
+                    className={cn(
+                      'w-4 h-4 text-slate-400 dark:text-zinc-400 shrink-0 transition-transform duration-200',
+                      isBranchDropdownOpen && 'rotate-180 text-slate-900 dark:text-white'
+                    )}
+                  />
+                )}
               </button>
 
               {/* Showroom List Dropdown */}
-              {isBranchDropdownOpen && (
+              {isBranchDropdownOpen && isBranchSwitcherEnabled && (
                 <div className="mt-1.5 rounded-[10px] bg-white dark:bg-[#1a1a1a] border border-slate-200 dark:border-[#2e2e2e] shadow-xl overflow-hidden py-1 text-xs font-sans animate-in fade-in duration-100">
                   <div className="px-3 py-2 border-b border-slate-200 dark:border-[#282828]">
                     <div className="flex items-center gap-2 text-slate-400">
@@ -841,40 +860,43 @@ export const Sidebar: React.FC = () => {
                   </div>
 
                   <div className="max-h-56 overflow-y-auto p-1 space-y-0.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        triggerHaptic('selection');
-                        setSelectedBranchId('ALL');
-                        setIsBranchDropdownOpen(false);
-                        setBranchSearch('');
-                      }}
-                      className={cn(
-                        'w-full flex items-center justify-between px-2.5 py-1.5 text-xs rounded-[6px] text-left transition-colors font-sans cursor-pointer',
-                        selectedBranchId === 'ALL'
-                          ? 'bg-emerald-500/15 text-emerald-800 dark:text-[#3ecf8e] font-medium'
-                          : 'text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-[#202020]'
-                      )}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-6 h-6 rounded-[4px] bg-[#007a4d] text-white flex items-center justify-center font-medium text-[10px] font-mono shrink-0">
-                          ALL
-                        </div>
-                        <div>
-                          <div className="font-medium text-slate-900 dark:text-white leading-tight">
-                            All Showrooms
+                    {canViewAll && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            triggerHaptic('selection');
+                            setSelectedBranchId('ALL');
+                            setIsBranchDropdownOpen(false);
+                            setBranchSearch('');
+                          }}
+                          className={cn(
+                            'w-full flex items-center justify-between px-2.5 py-2 text-xs rounded-[6px] text-left transition-colors font-sans cursor-pointer',
+                            selectedBranchId === 'ALL'
+                              ? 'bg-emerald-500/15 text-emerald-800 dark:text-[#3ecf8e] font-medium'
+                              : 'text-slate-700 dark:text-zinc-300 hover:bg-slate-50 dark:hover:bg-[#202020]'
+                          )}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="w-6 h-6 rounded-[4px] bg-emerald-500/10 text-emerald-600 dark:text-[#3ecf8e] flex items-center justify-center shrink-0">
+                              <Store className="w-3.5 h-3.5" />
+                            </div>
+                            <div>
+                              <div className="font-medium text-slate-900 dark:text-white leading-tight">
+                                All Showrooms
+                              </div>
+                              <div className="text-[10px] text-slate-500 dark:text-zinc-400">
+                                Combined View
+                              </div>
+                            </div>
                           </div>
-                          <div className="text-[10px] text-slate-500 dark:text-zinc-400">
-                            Combined View
-                          </div>
-                        </div>
-                      </div>
-                      {selectedBranchId === 'ALL' && (
-                        <Check className="w-3.5 h-3.5 text-[#3ecf8e] shrink-0 stroke-[2.5]" />
-                      )}
-                    </button>
-
-                    <div className="border-t border-slate-100 dark:border-[#282828] my-0.5" />
+                          {selectedBranchId === 'ALL' && (
+                            <Check className="w-3.5 h-3.5 text-[#3ecf8e] shrink-0 stroke-[2.5]" />
+                          )}
+                        </button>
+                        <div className="border-t border-slate-100 dark:border-[#282828] my-0.5" />
+                      </>
+                    )}
 
                     {filteredBranches.map((b) => {
                       const isSelected = b.branch_id === selectedBranchId;
@@ -889,15 +911,15 @@ export const Sidebar: React.FC = () => {
                             setBranchSearch('');
                           }}
                           className={cn(
-                            'w-full flex items-center justify-between px-2.5 py-1.5 text-xs rounded-[6px] text-left transition-colors font-sans cursor-pointer',
+                            'w-full flex items-center justify-between px-2.5 py-2 text-xs rounded-[6px] text-left transition-colors font-sans cursor-pointer',
                             isSelected
                               ? 'bg-emerald-500/15 text-emerald-800 dark:text-[#3ecf8e] font-medium'
                               : 'text-slate-700 dark:text-zinc-300 hover:bg-[#f4f4f5] dark:hover:bg-[#202020]'
                           )}
                         >
                           <div className="flex items-center gap-2 min-w-0">
-                            <div className="w-6 h-6 rounded-[4px] bg-[#007a4d] text-white flex items-center justify-center font-medium text-[10px] font-mono shrink-0">
-                              {b.branch_code}
+                            <div className="w-6 h-6 rounded-[4px] bg-emerald-500/10 text-emerald-600 dark:text-[#3ecf8e] flex items-center justify-center shrink-0">
+                              <Store className="w-3.5 h-3.5" />
                             </div>
                             <div className="truncate">
                               <div className="font-medium text-slate-900 dark:text-white leading-tight truncate">
@@ -933,7 +955,7 @@ export const Sidebar: React.FC = () => {
             if (visibleItems.length === 0) return null;
 
             return (
-              <div key={sIdx} className="space-y-1.5">
+              <div key={sIdx} className="space-y-1">
                 <div className="px-1 text-[10px] font-mono font-medium uppercase tracking-wider text-slate-400 dark:text-zinc-500">
                   {section.title}
                 </div>
@@ -951,62 +973,34 @@ export const Sidebar: React.FC = () => {
                           setMobileSidebarOpen(false);
                         }}
                         className={cn(
-                          'w-full flex items-center justify-between p-2.5 rounded-[10px] text-left transition-all font-sans cursor-pointer group select-none min-h-[44px] active:scale-[0.98]',
+                          'w-full flex items-center justify-between px-3 py-2.5 rounded-[10px] text-left transition-all font-sans cursor-pointer group select-none min-h-[44px] active:scale-[0.98]',
                           isActive
-                            ? 'bg-[#181818] dark:bg-white text-white dark:text-[#171717] shadow-md font-medium'
+                            ? 'bg-emerald-500/12 dark:bg-[#3ecf8e]/15 border border-emerald-500/30 dark:border-[#3ecf8e]/30 text-emerald-900 dark:text-[#3ecf8e] shadow-xs font-semibold'
                             : 'bg-white dark:bg-[#1a1a1a] border border-slate-200/80 dark:border-[#262626] text-slate-800 dark:text-zinc-200 hover:bg-slate-50 dark:hover:bg-[#222222]'
                         )}
                       >
-                        <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="flex items-center gap-3 min-w-0">
                           <div
                             className={cn(
                               'w-7 h-7 rounded-[6px] flex items-center justify-center shrink-0 transition-colors',
                               isActive
-                                ? 'bg-white/20 dark:bg-black/10 text-white dark:text-[#171717]'
+                                ? 'bg-emerald-500/20 dark:bg-[#3ecf8e]/20 text-emerald-700 dark:text-[#3ecf8e]'
                                 : 'bg-slate-100 dark:bg-[#222222] text-slate-600 dark:text-zinc-400 group-hover:text-slate-900 dark:group-hover:text-white'
                             )}
                           >
-                            <Icon className="w-4 h-4 stroke-[1.8]" />
+                            <Icon className="w-4 h-4 stroke-[2]" />
                           </div>
-                          <div className="truncate">
-                            <span className="text-xs font-medium block leading-tight font-sans">
-                              {item.label}
-                            </span>
-                            {item.description && (
-                              <span
-                                className={cn(
-                                  'text-[10px] block mt-0.5 font-sans truncate',
-                                  isActive
-                                    ? 'text-white/80 dark:text-[#171717]/80'
-                                    : 'text-slate-500 dark:text-zinc-400'
-                                )}
-                              >
-                                {item.description}
-                              </span>
-                            )}
-                          </div>
+                          <span className="text-xs font-medium block leading-tight font-sans truncate">
+                            {item.label}
+                          </span>
                         </div>
 
-                        <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                          {item.badge && (
-                            <kbd
-                              className={cn(
-                                'text-[10px] font-mono px-1.5 py-0.2 rounded-[4px] border',
-                                isActive
-                                  ? 'bg-white/20 dark:bg-black/10 text-white dark:text-[#171717] border-white/30 dark:border-black/20'
-                                  : 'bg-black/5 dark:bg-white/10 text-slate-500 dark:text-[#707070] border-transparent'
-                              )}
-                            >
-                              {item.badge}
-                            </kbd>
+                        <ChevronRight
+                          className={cn(
+                            'w-3.5 h-3.5 opacity-50 shrink-0 transition-transform',
+                            isActive ? 'text-emerald-700 dark:text-[#3ecf8e] translate-x-0.5 opacity-90' : 'text-slate-400'
                           )}
-                          <ChevronRight
-                            className={cn(
-                              'w-3.5 h-3.5 opacity-60 shrink-0',
-                              isActive ? 'text-white dark:text-[#171717]' : 'text-slate-400'
-                            )}
-                          />
-                        </div>
+                        />
                       </button>
                     );
                   })}

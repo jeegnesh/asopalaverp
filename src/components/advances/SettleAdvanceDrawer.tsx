@@ -241,7 +241,7 @@ export const SettleAdvanceDrawer: React.FC<SettleAdvanceDrawerProps> = ({ onSucc
       subtitle={`Staff: ${adv.staff_name} (${adv.staff_code}) • Advance Given: ${formatINR(adv.advance_amount)}`}
       badge={drawerBadge}
       copyId={adv.receipt_number}
-      size="full"
+      size="lg"
       footer={drawerFooter}
     >
       <form onSubmit={handleSubmit} className="max-w-4xl mx-auto w-full space-y-4">

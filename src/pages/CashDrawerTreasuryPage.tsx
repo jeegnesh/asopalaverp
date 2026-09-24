@@ -8,6 +8,7 @@ import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { formatINR, numberToWordsINR, formatDate, cn, triggerHaptic } from '@/lib/utils';
 import { useOverrideStore } from '@/store/overrideStore';
 import { SafeDropDrawer } from '@/components/treasury/SafeDropDrawer';
+import { DatePicker } from '@/components/ui/DatePicker';
 import {
   Wallet,
   Coins,
@@ -47,16 +48,19 @@ import {
   Tag,
   Shield,
   RefreshCw,
+  Table,
 } from 'lucide-react';
 import { useGsapContext } from '@/hooks/useGsap';
 import { animateStaggerCards } from '@/lib/animations';
 
-type DateFilter = 'today' | 'yesterday' | 'week' | 'all' | 'custom';
+type DateFilter = 'this_month' | 'today' | 'yesterday' | 'week' | 'all' | 'custom';
 type ScopeFilter = 'Float_Topup' | 'ALL';
 
 interface DenomCount {
   [key: number]: number;
 }
+
+const ALL_DENOMS = [500, 200, 100, 50, 20, 10, 5, 2, 1];
 
 function parseLedgerNotes(remarks?: string) {
   if (!remarks) return { title: 'Cash Added to Drawer', chips: [], modeDetails: null };
@@ -103,27 +107,22 @@ function downloadBlob(filename: string, content: string, mimeType: string) {
 }
 
 export const CashDrawerTreasuryPage: React.FC = () => {
-  const { user } = useAuthStore();
-  const isDeveloper = user?.role_code === 'Developer' || user?.role_code === 'Super_Admin';
+  const { user, getAllowedBranches, isBranchAllowed } = useAuthStore();
   const { branches, selectedBranchId, getActiveBranch } = useBranchStore();
   const { setActivePage } = useUIStore();
 
+  const allowedBranches = getAllowedBranches(branches);
   const activeBranch = getActiveBranch();
-  const [selectedBranch, setSelectedBranch] = useState(selectedBranchId || activeBranch.branch_id);
-  const [walletType, setWalletType] = useState<'Cash' | 'UPI'>('Cash');
-  const [upiAmount, setUpiAmount] = useState<number | ''>('');
-  const [transferMode, setTransferMode] = useState('Opening Float from Safe');
-  const [referenceNotes, setReferenceNotes] = useState('Morning Opening Till Float');
+  const initialBranch = (selectedBranchId && isBranchAllowed(selectedBranchId))
+    ? selectedBranchId
+    : (allowedBranches[0]?.branch_id || activeBranch.branch_id);
 
-  // Denomination notes state (₹500, ₹200, ₹100, ₹50, ₹20, ₹10)
-  const [counts, setCounts] = useState<DenomCount>({
-    500: 0,
-    200: 0,
-    100: 0,
-    50: 0,
-    20: 0,
-    10: 0,
-  });
+  const [selectedBranch, setSelectedBranch] = useState(initialBranch);
+  const [entryDate, setEntryDate] = useState<string>(formatDateFns(new Date(), 'yyyy-MM-dd'));
+  const [walletType, setWalletType] = useState<'Cash' | 'UPI'>('Cash');
+  const [amount, setAmount] = useState<number | ''>('');
+  const [transferMode, setTransferMode] = useState('');
+  const [referenceNotes, setReferenceNotes] = useState('');
 
   const [currentCashBalance, setCurrentCashBalance] = useState(0);
   const [currentUpiBalance, setCurrentUpiBalance] = useState(0);
@@ -134,9 +133,9 @@ export const CashDrawerTreasuryPage: React.FC = () => {
 
   // Pro Enterprise Ledger View & Filter State
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>('ALL');
-  const [dateFilter, setDateFilter] = useState<DateFilter>('all');
+  const [dateFilter, setDateFilter] = useState<DateFilter>('this_month');
   const [customDate, setCustomDate] = useState<string>(formatDateFns(new Date(), 'yyyy-MM-dd'));
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [ledgerViewMode, setLedgerViewMode] = useState<'statement' | 'timeline'>('statement');
   const [ledgerSearch, setLedgerSearch] = useState('');
   const [ledgerWalletFilter, setLedgerWalletFilter] = useState<'ALL' | 'Cash' | 'UPI'>('ALL');
   const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
@@ -157,6 +156,8 @@ export const CashDrawerTreasuryPage: React.FC = () => {
     setSelectedBranch(selectedBranchId || activeBranch.branch_id);
   }, [selectedBranchId, activeBranch.branch_id]);
 
+  const isDeveloper = user?.role_code === 'Developer' || user?.role_code === 'Super_Admin';
+
   // Global keyboard shortcuts ('/' to search ledger, ESC to close popovers)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -171,7 +172,6 @@ export const CashDrawerTreasuryPage: React.FC = () => {
       if (e.key === 'Escape') {
         setActiveRowDropdownId(null);
         setIsExportMenuOpen(false);
-        setShowDatePicker(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -244,7 +244,10 @@ export const CashDrawerTreasuryPage: React.FC = () => {
     }
 
     const now = new Date();
-    if (dateFilter === 'today') {
+    if (dateFilter === 'this_month') {
+      const monthStr = formatDateFns(now, 'yyyy-MM');
+      list = list.filter((l) => (l.created_at || '').slice(0, 7) === monthStr);
+    } else if (dateFilter === 'today') {
       const todayStr = formatDateFns(now, 'yyyy-MM-dd');
       list = list.filter((l) => (l.created_at || '').slice(0, 10) === todayStr);
     } else if (dateFilter === 'yesterday') {
@@ -278,6 +281,48 @@ export const CashDrawerTreasuryPage: React.FC = () => {
     }
     return list;
   }, [allLedgerEntries, scopeFilter, ledgerWalletFilter, dateFilter, customDate, ledgerSearch]);
+
+  // Comprehensive Treasury Flow Summary (Top-ups, Inflow, Outflow, Net Position)
+  const treasurySummary = useMemo(() => {
+    let totalCashIn = 0;
+    let totalCashOut = 0;
+    let totalUpiIn = 0;
+    let totalUpiOut = 0;
+    let totalFloatTopups = 0;
+    let topupCount = 0;
+
+    filteredAllocations.forEach((entry) => {
+      const credit = Number(entry.credit_amount) || 0;
+      const debit = Number(entry.debit_amount) || 0;
+      const isCash = entry.wallet_type === 'Cash' || !entry.wallet_type;
+      const isUpi = entry.wallet_type === 'UPI';
+
+      if (credit > 0) {
+        topupCount++;
+        totalFloatTopups += credit;
+        if (isCash) totalCashIn += credit;
+        if (isUpi) totalUpiIn += credit;
+      }
+      if (debit > 0) {
+        if (isCash) totalCashOut += debit;
+        if (isUpi) totalUpiOut += debit;
+      }
+    });
+
+    return {
+      totalCashIn,
+      totalCashOut,
+      netCash: totalCashIn - totalCashOut,
+      totalUpiIn,
+      totalUpiOut,
+      netUpi: totalUpiIn - totalUpiOut,
+      totalMoneyIn: totalCashIn + totalUpiIn,
+      totalMoneyOut: totalCashOut + totalUpiOut,
+      netTotalFlow: totalCashIn + totalUpiIn - (totalCashOut + totalUpiOut),
+      totalFloatTopups,
+      topupCount,
+    };
+  }, [filteredAllocations]);
 
   const ledgerTotalSum = useMemo(() => {
     return filteredAllocations.reduce((acc, curr) => acc + (Number(curr.credit_amount) || 0), 0);
@@ -314,63 +359,34 @@ export const CashDrawerTreasuryPage: React.FC = () => {
     }
   };
 
-  const cashNotesTotal = useMemo(() => {
-    return Object.entries(counts).reduce((acc, [denomStr, count]) => {
-      const denom = Number(denomStr);
-      return acc + denom * (count || 0);
-    }, 0);
-  }, [counts]);
-
-  const handleStepCount = (denom: number, delta: number) => {
-    triggerHaptic(Math.abs(delta) > 1 ? 'medium' : 'selection');
-    setCounts((prev) => ({
-      ...prev,
-      [denom]: Math.max(0, (prev[denom] || 0) + delta),
-    }));
-  };
-
-  const handleCountChange = (denom: number, val: string) => {
-    const num = parseInt(val, 10);
-    setCounts((prev) => ({
-      ...prev,
-      [denom]: isNaN(num) || num < 0 ? 0 : num,
-    }));
-  };
-
-  const handleResetCounts = () => {
+  const handleResetForm = () => {
     triggerHaptic('light');
-    setCounts({
-      500: 0,
-      200: 0,
-      100: 0,
-      50: 0,
-      20: 0,
-      10: 0,
-    });
+    setAmount('');
+    setReferenceNotes('');
+    setTransferMode('');
+    setEntryDate(formatDateFns(new Date(), 'yyyy-MM-dd'));
+    setFeedback(null);
   };
 
   const handleTopupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFeedback(null);
 
-    const amountToAdd = walletType === 'Cash' ? cashNotesTotal : Number(upiAmount) || 0;
+    const amountToAdd = Number(amount) || 0;
 
     if (amountToAdd <= 0) {
-      setFeedback({ type: 'error', message: 'Please enter a valid float amount greater than ₹0.' });
+      setFeedback({ type: 'error', message: 'Please enter a valid amount greater than ₹0.' });
       return;
     }
 
     setSubmitting(true);
     try {
-      let notesSummary = '';
-      if (walletType === 'Cash') {
-        const parts = Object.entries(counts)
-          .filter(([_, c]) => c > 0)
-          .map(([denom, c]) => `₹${denom}×${c}`);
-        notesSummary = parts.length > 0 ? `[Notes: ${parts.join(', ')}]` : '';
-      }
-
-      const fullRemarks = `${referenceNotes.trim() || 'Opening Till Float'} [Transfer Mode: ${transferMode}] ${notesSummary}`.trim();
+      const isHistorical = entryDate !== formatDateFns(new Date(), 'yyyy-MM-dd');
+      const dateTag = isHistorical ? ` [Date: ${entryDate}]` : '';
+      const defaultNote = walletType === 'Cash' ? 'Cash Box Inflow' : 'Bank UPI Inflow';
+      const noteContent = referenceNotes.trim() || defaultNote;
+      const modeTag = transferMode ? ` [Transfer Mode: ${transferMode}]` : '';
+      const fullRemarks = `${noteContent}${modeTag}${dateTag}`.trim();
 
       const userName = `${user?.first_name || 'Cashier'} ${user?.last_name || ''}`.trim();
       const authName = `${user?.first_name || 'Store'} ${user?.last_name || 'Manager'}`.trim();
@@ -383,16 +399,17 @@ export const CashDrawerTreasuryPage: React.FC = () => {
         referenceNotes: fullRemarks,
         receivedByName: userName,
         authorizedByName: authName,
+        createdAt: isHistorical ? new Date(`${entryDate}T12:00:00`).toISOString() : undefined,
       });
 
       triggerHaptic('heavy');
       setFeedback({
         type: 'success',
-        message: `Successfully added ${formatINR(amountToAdd)} to ${walletType} till!`,
+        message: `Successfully recorded ${formatINR(amountToAdd)} ${walletType === 'Cash' ? 'Cash' : 'Bank UPI'} inflow${isHistorical ? ` for ${entryDate}` : ''}!`,
       });
 
-      if (walletType === 'UPI') setUpiAmount('');
-      handleResetCounts();
+      setAmount('');
+      setEntryDate(formatDateFns(new Date(), 'yyyy-MM-dd'));
       loadTreasuryData();
       window.dispatchEvent(new Event('asopalav:wallet-updated'));
     } catch (err: any) {
@@ -547,43 +564,38 @@ export const CashDrawerTreasuryPage: React.FC = () => {
             </div>
 
             {/* Date Range Selector */}
-            <div className="relative w-36">
+            <div className="w-36">
               <SearchableSelect
                 size="sm"
                 options={[
-                  { value: 'all', label: 'All Time' },
+                  { value: 'this_month', label: 'This Month' },
                   { value: 'today', label: 'Today' },
                   { value: 'yesterday', label: 'Yesterday' },
                   { value: 'week', label: 'Last 7 Days' },
-                  { value: 'custom', label: 'Custom Date...' },
+                  { value: 'all', label: 'All Time' },
+                  { value: 'custom', label: 'Specific Date...' },
                 ]}
                 value={dateFilter}
                 onChange={(val) => {
-                  const dVal = val as DateFilter;
-                  setDateFilter(dVal);
-                  if (dVal === 'custom') setShowDatePicker(true);
-                  else setShowDatePicker(false);
+                  setDateFilter(val as DateFilter);
                 }}
                 placeholder="Date range"
                 searchPlaceholder="Search date..."
                 allowCustom={false}
               />
-
-              {showDatePicker && (
-                <div className="absolute left-0 mt-1 z-50 p-2 rounded-[8px] bg-white dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#2e2e2e] shadow-xl space-y-2">
-                  <input
-                    type="date"
-                    value={customDate}
-                    onChange={(e) => {
-                      setCustomDate(e.target.value);
-                      setDateFilter('custom');
-                      setShowDatePicker(false);
-                    }}
-                    className="bg-white dark:bg-[#141414] border border-slate-200 dark:border-[#2e2e2e] rounded-[4px] px-2 py-1 text-xs text-slate-900 dark:text-white font-mono focus:outline-none focus:border-[#3ecf8e] focus:ring-1 focus:ring-[#3ecf8e]"
-                  />
-                </div>
-              )}
             </div>
+
+            {/* Direct DatePicker for Specific Date selection */}
+            {dateFilter === 'custom' && (
+              <div className="w-40 animate-in fade-in">
+                <DatePicker
+                  value={customDate}
+                  onChange={(val) => setCustomDate(val)}
+                  allowPastDatesOverride={true}
+                  placeholder="Pick date..."
+                />
+              </div>
+            )}
           </div>
 
           {/* Branch Selector */}
@@ -591,10 +603,10 @@ export const CashDrawerTreasuryPage: React.FC = () => {
             <SearchableSelect
               value={selectedBranch}
               onChange={setSelectedBranch}
-              options={branches.map((b) => ({
+              options={allowedBranches.map((b) => ({
                 value: b.branch_id,
-                label: b.branch_name,
-                badge: b.branch_code,
+                label: b.branch_code,
+                sublabel: b.branch_name.replace(/^Asopalav\s*-\s*/i, ''),
               }))}
               placeholder="Select branch..."
             />
@@ -690,269 +702,129 @@ export const CashDrawerTreasuryPage: React.FC = () => {
         {/* Left Column: Add Cash Form (7 cols) */}
         <div className="lg:col-span-7 space-y-4">
           <form onSubmit={handleTopupSubmit} className="stagger-card p-4 rounded-[12px] bg-white dark:bg-[#141414] border border-slate-200 dark:border-[#242424] space-y-4 shadow-xs">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-[#242424]">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-[#242424] gap-2">
               <div className="flex items-center gap-2">
                 <Coins className="w-3.5 h-3.5 text-[#3ecf8e]" />
                 <h2 className="text-xs font-medium text-slate-900 dark:text-white font-sans">
                   Add Money to Cash Box / Bank
                 </h2>
               </div>
-              <div className="inline-flex rounded-[6px] p-0.5 bg-slate-100 dark:bg-[#171717] border border-slate-200 dark:border-[#2e2e2e]">
+              <div className="flex items-center gap-2">
+                <div className="inline-flex rounded-[6px] p-0.5 bg-slate-100 dark:bg-[#171717] border border-slate-200 dark:border-[#2e2e2e]">
+                  <button
+                    type="button"
+                    onClick={() => setWalletType('Cash')}
+                    className={cn(
+                      'px-2.5 py-1 rounded-[4px] text-xs font-sans transition-all cursor-pointer font-medium',
+                      walletType === 'Cash'
+                        ? 'bg-white dark:bg-[#282828] text-slate-900 dark:text-white font-medium border border-slate-300 dark:border-[#383838] shadow-xs'
+                        : 'text-slate-500 dark:text-[#A1A1A1] hover:text-slate-900 dark:hover:text-white border border-transparent'
+                    )}
+                  >
+                    Cash Notes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWalletType('UPI')}
+                    className={cn(
+                      'px-2.5 py-1 rounded-[4px] text-xs font-sans transition-all cursor-pointer font-medium',
+                      walletType === 'UPI'
+                        ? 'bg-white dark:bg-[#282828] text-slate-900 dark:text-white font-medium border border-slate-300 dark:border-[#383838] shadow-xs'
+                        : 'text-slate-500 dark:text-[#A1A1A1] hover:text-slate-900 dark:hover:text-white border border-transparent'
+                    )}
+                  >
+                    Bank UPI
+                  </button>
+                </div>
+
                 <button
                   type="button"
-                  onClick={() => setWalletType('Cash')}
-                  className={cn(
-                    'px-2.5 py-1 rounded-[4px] text-xs font-sans transition-all cursor-pointer font-medium',
-                    walletType === 'Cash'
-                      ? 'bg-white dark:bg-[#282828] text-slate-900 dark:text-white font-medium border border-slate-300 dark:border-[#383838] shadow-xs'
-                      : 'text-slate-500 dark:text-[#A1A1A1] hover:text-slate-900 dark:hover:text-white border border-transparent'
-                  )}
+                  onClick={handleResetForm}
+                  className="h-7 w-7 flex items-center justify-center rounded-[6px] text-slate-500 dark:text-[#A1A1A1] hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#222222] border border-slate-200 dark:border-[#2e2e2e] transition-colors cursor-pointer shadow-xs shrink-0"
+                  title="Reset Form"
                 >
-                  Cash Notes
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setWalletType('UPI')}
-                  className={cn(
-                    'px-2.5 py-1 rounded-[4px] text-xs font-sans transition-all cursor-pointer font-medium',
-                    walletType === 'UPI'
-                      ? 'bg-white dark:bg-[#282828] text-slate-900 dark:text-white font-medium border border-slate-300 dark:border-[#383838] shadow-xs'
-                      : 'text-slate-500 dark:text-[#A1A1A1] hover:text-slate-900 dark:hover:text-white border border-transparent'
-                  )}
-                >
-                  Bank UPI
+                  <RotateCcw className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
 
-            {walletType === 'Cash' ? (
-              /* Denomination Fast-Pad */
-              <div className="space-y-3 font-mono">
+            {/* Unified Clean Amount Input with Additive Chips for both Cash & Bank UPI */}
+            <div className="space-y-3 font-sans">
+              <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-600 dark:text-[#A1A1A1] font-medium font-sans">
-                    Count Cash Notes (₹500 to ₹10)
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleResetCounts}
-                    className="text-xs text-slate-500 dark:text-[#A1A1A1] hover:text-rose-500 dark:hover:text-rose-400 flex items-center gap-1 cursor-pointer font-sans font-medium transition-colors"
-                  >
-                    <RotateCcw className="w-3 h-3" />
-                    <span>Reset Counts</span>
-                  </button>
-                </div>
-
-                {/* Mobile Steppers (< lg) */}
-                <div className="lg:hidden space-y-2.5 font-sans">
-                  {[500, 200, 100, 50, 20, 10].map((denom, idx) => {
-                    const count = counts[denom] || 0;
-                    const subtotal = denom * count;
-
-                    return (
-                      <div
-                        key={denom}
-                        className="p-3 rounded-[8px] bg-slate-50 dark:bg-[#171717] border border-slate-200 dark:border-[#282828] space-y-2.5"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="px-2.5 py-1 rounded-[4px] text-xs font-mono font-bold bg-slate-200 dark:bg-[#1f1f1f] text-emerald-700 dark:text-[#3ecf8e] border border-slate-300 dark:border-[#2e2e2e]">
-                              ₹{denom}
-                            </span>
-                            <span className="text-xs font-mono text-slate-500 dark:text-[#A1A1A1]">
-                              {count} pcs
-                            </span>
-                          </div>
-
-                          <div className="text-right font-mono font-bold text-sm text-slate-900 dark:text-white tabular-nums">
-                            {formatINR(subtotal)}
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-5 gap-1.5 pt-0.5 font-mono">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              triggerHaptic('selection');
-                              handleStepCount(denom, -10);
-                            }}
-                            disabled={count < 10}
-                            className="py-2 rounded-[6px] bg-white dark:bg-[#222222] border border-slate-200 dark:border-[#2e2e2e] text-slate-700 dark:text-[#A1A1A1] text-xs font-bold disabled:opacity-30 cursor-pointer active:scale-95 transition-all flex items-center justify-center hover:bg-slate-100 dark:hover:bg-[#282828]"
-                          >
-                            -10
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              triggerHaptic('selection');
-                              handleStepCount(denom, -1);
-                            }}
-                            disabled={count <= 0}
-                            className="py-2 rounded-[6px] bg-white dark:bg-[#222222] border border-slate-200 dark:border-[#2e2e2e] text-slate-700 dark:text-[#A1A1A1] text-xs font-bold disabled:opacity-30 cursor-pointer active:scale-95 transition-all flex items-center justify-center hover:bg-slate-100 dark:hover:bg-[#282828]"
-                          >
-                            -1
-                          </button>
-
-                          <input
-                            id={`float-denom-mob-${idx}`}
-                            type="number"
-                            min="0"
-                            value={count || ''}
-                            onChange={(e) => handleCountChange(denom, e.target.value)}
-                            placeholder="0"
-                            className="py-1.5 bg-white dark:bg-[#141414] border border-slate-200 dark:border-[#2e2e2e] rounded-[6px] text-center text-sm font-mono font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#3ecf8e] focus:ring-1 focus:ring-[#3ecf8e] tabular-nums"
-                          />
-
-                          <button
-                            type="button"
-                            onClick={() => {
-                              triggerHaptic('selection');
-                              handleStepCount(denom, 1);
-                            }}
-                            className="py-2 rounded-[6px] bg-white dark:bg-[#222222] border border-slate-200 dark:border-[#2e2e2e] text-slate-700 dark:text-[#A1A1A1] text-xs font-bold cursor-pointer active:scale-95 transition-all flex items-center justify-center hover:bg-slate-100 dark:hover:bg-[#282828]"
-                          >
-                            +1
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              triggerHaptic('selection');
-                              handleStepCount(denom, 10);
-                            }}
-                            className="py-2 rounded-[6px] bg-white dark:bg-[#222222] border border-slate-200 dark:border-[#2e2e2e] text-slate-700 dark:text-[#A1A1A1] text-xs font-bold cursor-pointer active:scale-95 transition-all flex items-center justify-center hover:bg-slate-100 dark:hover:bg-[#282828]"
-                          >
-                            +10
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Desktop Denomination Table (lg+) */}
-                <div className="hidden lg:block border border-slate-200 dark:border-[#242424] rounded-[8px] overflow-hidden bg-white dark:bg-[#171717]">
-                  <table className="w-full border-collapse text-left text-xs font-mono">
-                    <thead>
-                      <tr className="border-b border-slate-200 dark:border-[#242424] bg-slate-50 dark:bg-[#141414] text-[11px] text-slate-500 dark:text-[#A1A1A1]">
-                        <th className="py-2.5 px-3">Note Type</th>
-                        <th className="py-2.5 px-3 text-center">Count</th>
-                        <th className="py-2.5 px-3 text-right">Total (₹)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-[#242424]">
-                      {[500, 200, 100, 50, 20, 10].map((denom, idx) => {
-                        const count = counts[denom] || 0;
-                        const subtotal = denom * count;
-
-                        return (
-                          <tr key={denom} className="hover:bg-slate-50/80 dark:hover:bg-[#1a1a1a] transition-colors">
-                            <td className="py-2 px-3">
-                              <span className="font-medium text-slate-900 dark:text-white">₹{denom} Note</span>
-                            </td>
-                            <td className="py-2 px-3">
-                              <div className="flex items-center justify-center gap-1.5 max-w-[180px] mx-auto">
-                                <button
-                                  type="button"
-                                  onClick={() => handleStepCount(denom, -1)}
-                                  disabled={count <= 0}
-                                  className="w-7 h-7 rounded-[4px] bg-slate-100 dark:bg-[#202020] border border-slate-200 dark:border-[#2e2e2e] text-slate-700 dark:text-[#A1A1A1] hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-[#282828] flex items-center justify-center cursor-pointer text-xs shrink-0 disabled:opacity-30 active:scale-95 transition-all"
-                                >
-                                  <Minus className="w-3 h-3" />
-                                </button>
-                                <input
-                                  id={`float-denom-${idx}`}
-                                  type="number"
-                                  min="0"
-                                  value={count || ''}
-                                  onChange={(e) => handleCountChange(denom, e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      e.preventDefault();
-                                      const next = document.getElementById(`float-denom-${idx + 1}`);
-                                      if (next) next.focus();
-                                    }
-                                  }}
-                                  placeholder="0"
-                                  className="w-16 h-7 bg-white dark:bg-[#141414] border border-slate-200 dark:border-[#2e2e2e] rounded-[4px] text-center text-xs font-mono font-bold text-slate-900 dark:text-white focus:outline-none focus:border-[#3ecf8e] focus:ring-1 focus:ring-[#3ecf8e] tabular-nums"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => handleStepCount(denom, 1)}
-                                  className="w-7 h-7 rounded-[4px] bg-slate-100 dark:bg-[#202020] border border-slate-200 dark:border-[#2e2e2e] text-slate-700 dark:text-[#A1A1A1] hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-[#282828] flex items-center justify-center cursor-pointer text-xs shrink-0 active:scale-95 transition-all"
-                                >
-                                  <Plus className="w-3 h-3" />
-                                </button>
-                              </div>
-                            </td>
-                            <td className="py-2 px-3 text-right">
-                              <span className="font-medium text-slate-900 dark:text-white tabular-nums">
-                                {formatINR(subtotal)}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                    <tfoot>
-                      <tr className="border-t border-slate-200 dark:border-[#242424] bg-slate-50 dark:bg-[#141414] text-xs">
-                        <td className="py-2.5 px-3 font-sans text-slate-900 dark:text-white font-medium">Total Cash Notes</td>
-                        <td className="py-2.5 px-3 text-center text-slate-500 dark:text-[#A1A1A1] font-mono text-[11px]">
-                          {Object.values(counts).reduce((a, b) => a + (b || 0), 0)} Notes
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-medium text-emerald-600 dark:text-[#3ecf8e] font-mono tabular-nums text-sm">
-                          {formatINR(cashNotesTotal)}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
-            ) : (
-              /* UPI Amount Inputs with 1-Tap Chips */
-              <div className="space-y-3 font-sans">
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-medium text-slate-800 dark:text-[#e0e0e0]">
-                      Bank / UPI Amount (₹) *
-                    </label>
-                    {Number(upiAmount) > 0 && (
-                      <span className="text-[11px] font-mono text-emerald-600 dark:text-[#3ecf8e]">
-                        {numberToWordsINR(Number(upiAmount))}
-                      </span>
-                    )}
-                  </div>
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono font-bold text-slate-400 dark:text-[#737373] text-sm">
-                      ₹
+                  <label className="block text-xs font-medium text-slate-800 dark:text-[#e0e0e0]">
+                    {walletType === 'Cash' ? 'Cash Amount (₹) *' : 'Bank / UPI Amount (₹) *'}
+                  </label>
+                  {Number(amount) > 0 && (
+                    <span className="text-[11px] font-mono text-emerald-600 dark:text-[#3ecf8e]">
+                      {numberToWordsINR(Number(amount))}
                     </span>
-                    <input
-                      type="number"
-                      min="1"
-                      value={upiAmount}
-                      onChange={(e) => setUpiAmount(parseFloat(e.target.value) || '')}
-                      placeholder="e.g. 10000"
-                      className="w-full bg-white dark:bg-[#141414] border border-slate-200 dark:border-[#2e2e2e] rounded-[6px] pl-8 pr-3 py-2 text-sm font-mono font-bold tabular-nums text-slate-900 dark:text-white focus:outline-none focus:border-[#3ecf8e] focus:ring-1 focus:ring-[#3ecf8e]"
-                    />
-                  </div>
+                  )}
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-mono font-bold text-slate-400 dark:text-[#737373] text-sm">
+                    ₹
+                  </span>
+                  <input
+                    type="number"
+                    min="1"
+                    value={amount}
+                    onChange={(e) => setAmount(parseFloat(e.target.value) || '')}
+                    placeholder="e.g. 10000"
+                    className="w-full bg-white dark:bg-[#141414] border border-slate-200 dark:border-[#2e2e2e] rounded-[6px] pl-8 pr-3 py-2 text-sm font-mono font-bold tabular-nums text-slate-900 dark:text-white focus:outline-none focus:border-[#3ecf8e] focus:ring-1 focus:ring-[#3ecf8e]"
+                  />
+                </div>
 
-                  {/* 1-Tap UPI Preset Chips */}
-                  <div className="flex flex-wrap items-center gap-1.5 pt-1 font-mono">
-                    {[5000, 10000, 25000, 50000].map((quickAmt) => (
-                      <button
-                        key={quickAmt}
-                        type="button"
-                        onClick={() => {
-                          triggerHaptic('selection');
-                          setUpiAmount(quickAmt);
-                        }}
-                        className="px-2.5 py-1 rounded-[5px] bg-slate-100 dark:bg-[#1a1a1a] hover:bg-slate-200 dark:hover:bg-[#222222] border border-slate-200 dark:border-[#2e2e2e] text-xs font-medium text-slate-700 dark:text-[#A1A1A1] hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
-                      >
-                        {formatINR(quickAmt)}
-                      </button>
-                    ))}
-                  </div>
+                {/* 1-Tap Additive Preset Chips */}
+                <div className="flex flex-wrap items-center gap-1.5 pt-1 font-mono">
+                  {[1000, 2000, 5000, 10000, 25000, 50000].map((quickAmt) => (
+                    <button
+                      key={quickAmt}
+                      type="button"
+                      onClick={() => {
+                        triggerHaptic('selection');
+                        setAmount((prev) => (Number(prev) || 0) + quickAmt);
+                      }}
+                      className="px-2.5 py-1 rounded-[5px] bg-slate-100 dark:bg-[#1a1a1a] hover:bg-slate-200 dark:hover:bg-[#222222] border border-slate-200 dark:border-[#2e2e2e] text-xs font-medium text-slate-700 dark:text-[#A1A1A1] hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer active:scale-95 shadow-2xs"
+                    >
+                      +₹{quickAmt >= 1000 ? `${(quickAmt / 1000).toLocaleString('en-IN')}k` : quickAmt}
+                    </button>
+                  ))}
+                  {Number(amount) > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        triggerHaptic('light');
+                        setAmount('');
+                      }}
+                      className="px-2.5 py-1 rounded-[5px] text-xs font-mono text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  )}
                 </div>
               </div>
-            )}
+            </div>
+
+            {/* Transaction Date (supports filing older dates for Admin / Manager) */}
+            <div className="space-y-1 font-sans">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-medium text-slate-800 dark:text-[#e0e0e0]">
+                  Entry / Inflow Date
+                </label>
+                {entryDate !== formatDateFns(new Date(), 'yyyy-MM-dd') && (
+                  <span className="text-[10.5px] font-mono px-2 py-0.5 rounded-[4px] bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 font-medium">
+                    Historical Entry ({entryDate})
+                  </span>
+                )}
+              </div>
+              <DatePicker
+                value={entryDate}
+                onChange={(val) => setEntryDate(val)}
+                allowPastDatesOverride={isDeveloper || user?.role_code === 'Super_Admin' || user?.role_code === 'Store_Manager'}
+                placeholder="Select entry date..."
+              />
+            </div>
 
             {/* Reference Remarks */}
             <div className="space-y-1 font-sans">
@@ -981,22 +853,39 @@ export const CashDrawerTreasuryPage: React.FC = () => {
               </div>
             )}
 
-            {/* Action Footer with Single Emerald CTA */}
+            {/* Action Footer with Total & Reset & Emerald CTA */}
             <div className="pt-3 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-slate-200 dark:border-[#242424]">
               <div className="text-xs text-slate-600 dark:text-[#A1A1A1] font-mono flex items-center justify-between sm:justify-start gap-2">
                 <span>Total to Add:</span>
                 <span className="font-bold text-slate-900 dark:text-white tabular-nums text-sm">
-                  {formatINR(walletType === 'Cash' ? cashNotesTotal : Number(upiAmount) || 0)}
+                  {formatINR(Number(amount) || 0)}
                 </span>
               </div>
-              <button
-                type="submit"
-                disabled={submitting}
-                className="h-10 px-5 rounded-[6px] bg-[#3ecf8e] hover:bg-[#24b47e] text-[#171717] font-medium text-xs font-sans flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] cursor-pointer select-none shadow-xs"
-              >
-                <Check className="w-4 h-4 text-[#171717] stroke-[3]" />
-                <span>{submitting ? 'Adding Cash...' : 'Add Cash to Box'}</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleResetForm}
+                  className="h-10 w-10 flex items-center justify-center rounded-[6px] border border-slate-200 dark:border-[#282828] bg-slate-50 dark:bg-[#1a1a1a] text-slate-600 dark:text-[#A1A1A1] hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#222222] transition-colors cursor-pointer shadow-xs shrink-0"
+                  title="Reset Form"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 sm:flex-none h-10 px-5 rounded-[6px] bg-[#3ecf8e] hover:bg-[#24b47e] text-[#171717] font-medium text-xs font-sans flex items-center justify-center gap-1.5 transition-all active:scale-[0.98] cursor-pointer select-none shadow-xs"
+                >
+                  <Check className="w-4 h-4 text-[#171717] stroke-[3]" />
+                  <span>
+                    {submitting
+                      ? 'Adding Money...'
+                      : walletType === 'Cash'
+                      ? 'Add Cash to Box'
+                      : 'Add UPI to Bank'}
+                  </span>
+                </button>
+              </div>
             </div>
           </form>
         </div>
@@ -1009,194 +898,276 @@ export const CashDrawerTreasuryPage: React.FC = () => {
               <div className="flex items-center gap-2">
                 <History className="w-3.5 h-3.5 text-[#3ecf8e]" />
                 <h2 className="text-xs font-medium text-slate-900 dark:text-white font-sans">
-                  Cash Box History & Records
+                  Treasury Statement &amp; History
                 </h2>
                 <span className="px-1.5 py-0.2 rounded-[4px] text-[10px] font-mono font-bold bg-slate-100 dark:bg-[#1f1f1f] text-slate-600 dark:text-[#A1A1A1] border border-slate-200 dark:border-[#2e2e2e]">
                   {filteredAllocations.length}
                 </span>
               </div>
+
+              {/* View Switch: Statement Table vs Timeline Cards */}
+              <div className="inline-flex rounded-[6px] p-0.5 bg-slate-100 dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#2e2e2e]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    triggerHaptic('selection');
+                    setLedgerViewMode('statement');
+                  }}
+                  className={cn(
+                    'px-2 py-0.5 rounded-[4px] text-[11px] font-sans flex items-center gap-1 transition-all cursor-pointer',
+                    ledgerViewMode === 'statement'
+                      ? 'bg-white dark:bg-[#282828] text-slate-900 dark:text-white font-medium shadow-xs'
+                      : 'text-slate-500 dark:text-[#888] hover:text-slate-900 dark:hover:text-white'
+                  )}
+                  title="Tabular accounting statement"
+                >
+                  <Table className="w-3 h-3" />
+                  <span className="hidden sm:inline">Statement</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    triggerHaptic('selection');
+                    setLedgerViewMode('timeline');
+                  }}
+                  className={cn(
+                    'px-2 py-0.5 rounded-[4px] text-[11px] font-sans flex items-center gap-1 transition-all cursor-pointer',
+                    ledgerViewMode === 'timeline'
+                      ? 'bg-white dark:bg-[#282828] text-slate-900 dark:text-white font-medium shadow-xs'
+                      : 'text-slate-500 dark:text-[#888] hover:text-slate-900 dark:hover:text-white'
+                  )}
+                  title="Timeline feed"
+                >
+                  <LayoutList className="w-3 h-3" />
+                  <span className="hidden sm:inline">Feed</span>
+                </button>
+              </div>
             </div>
 
-            {/* TIMELINE FEED VIEW */}
-            <div className="rounded-[8px] border border-slate-200 dark:border-[#242424] bg-slate-50 dark:bg-[#171717] p-3.5">
-              <div className="relative pl-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-[2px] before:bg-slate-200 dark:before:bg-[#282828] space-y-3.5 max-h-[520px] overflow-y-auto pr-1">
-                {filteredAllocations.map((entry, idx) => {
-                  const parsed = parseLedgerNotes(entry.remarks);
-                  const isCredit = Number(entry.credit_amount) > 0;
-                  const amountValue = isCredit ? Number(entry.credit_amount) : Number(entry.debit_amount) || 0;
-                  const isUpi = entry.wallet_type === 'UPI';
+            {/* Quick Flow Summary Strip */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+              <div className="p-2.5 rounded-[8px] bg-slate-50 dark:bg-[#181818] border border-slate-200 dark:border-[#262626]">
+                <span className="text-[10px] text-slate-500 dark:text-[#707070] block font-sans">Cash Inflow:</span>
+                <span className="text-emerald-600 dark:text-[#3ecf8e] font-semibold text-xs tabular-nums block mt-0.5">
+                  +{formatINR(treasurySummary.totalCashIn)}
+                </span>
+              </div>
+              <div className="p-2.5 rounded-[8px] bg-slate-50 dark:bg-[#181818] border border-slate-200 dark:border-[#262626]">
+                <span className="text-[10px] text-slate-500 dark:text-[#707070] block font-sans">Cash Outflow:</span>
+                <span className="text-rose-600 dark:text-rose-400 font-semibold text-xs tabular-nums block mt-0.5">
+                  -{formatINR(treasurySummary.totalCashOut)}
+                </span>
+              </div>
+              <div className="p-2.5 rounded-[8px] bg-slate-50 dark:bg-[#181818] border border-slate-200 dark:border-[#262626]">
+                <span className="text-[10px] text-slate-500 dark:text-[#707070] block font-sans">UPI Inflow:</span>
+                <span className="text-sky-600 dark:text-sky-400 font-semibold text-xs tabular-nums block mt-0.5">
+                  +{formatINR(treasurySummary.totalUpiIn)}
+                </span>
+              </div>
+              <div className="p-2.5 rounded-[8px] bg-slate-50 dark:bg-[#181818] border border-slate-200 dark:border-[#262626]">
+                <span className="text-[10px] text-slate-500 dark:text-[#707070] block font-sans">UPI Outflow:</span>
+                <span className="text-rose-600 dark:text-rose-400 font-semibold text-xs tabular-nums block mt-0.5">
+                  -{formatINR(treasurySummary.totalUpiOut)}
+                </span>
+              </div>
+            </div>
 
-                  return (
-                    <div key={entry.id || idx} className="relative group">
-                      {/* Timeline Node Marker */}
-                      <div
-                        className={cn(
-                          'absolute -left-6 top-1.5 w-5 h-5 rounded-full border flex items-center justify-center transition-transform group-hover:scale-110',
-                          isUpi
-                            ? 'bg-sky-50 dark:bg-sky-950/60 border-sky-200 dark:border-sky-700 text-sky-600 dark:text-sky-400'
-                            : 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-700 text-emerald-600 dark:text-[#3ecf8e]'
-                        )}
-                      >
-                        {isUpi ? (
-                          <QrCode className="w-2.5 h-2.5" />
-                        ) : (
-                          <Coins className="w-2.5 h-2.5" />
-                        )}
-                      </div>
+            {/* TABULAR STATEMENT VIEW */}
+            {ledgerViewMode === 'statement' ? (
+              <div className="border border-slate-200 dark:border-[#242424] rounded-[8px] overflow-hidden bg-white dark:bg-[#171717]">
+                <div className="max-h-[500px] overflow-x-auto overflow-y-auto">
+                  <table className="w-full border-collapse text-left text-xs font-mono">
+                    <thead className="sticky top-0 z-10">
+                      <tr className="border-b border-slate-200 dark:border-[#242424] bg-slate-50 dark:bg-[#141414] text-[11px] text-slate-500 dark:text-[#A1A1A1]">
+                        <th className="py-2.5 px-3">Date/Time</th>
+                        <th className="py-2.5 px-3">Wallet</th>
+                        <th className="py-2.5 px-3 text-right">Inflow (+)</th>
+                        <th className="py-2.5 px-3 text-right">Outflow (-)</th>
+                        <th className="py-2.5 px-3">Particulars &amp; Notes</th>
+                        <th className="py-2.5 px-3">User</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-[#242424]">
+                      {filteredAllocations.map((entry, idx) => {
+                        const parsed = parseLedgerNotes(entry.remarks);
+                        const isCredit = Number(entry.credit_amount) > 0;
+                        const isUpi = entry.wallet_type === 'UPI';
 
-                      {/* Timeline Card */}
-                      <div className="p-3 rounded-[8px] bg-white dark:bg-[#141414] border border-slate-200 dark:border-[#242424] hover:border-slate-300 dark:hover:border-[#383838] transition-all space-y-2 shadow-xs">
-                        {/* Top Row: Date/Time + Amount + Mode */}
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-[#A1A1A1] font-mono">
-                            <Clock className="w-3 h-3 text-slate-400 dark:text-[#737373]" />
-                            <span>{formatDate(entry.created_at, 'dd MMM, HH:mm')}</span>
-                          </div>
-
-                          <div className="flex items-center gap-1.5">
-                            <span
-                              className={cn(
-                                'font-mono font-medium text-xs tabular-nums',
-                                isCredit
-                                  ? 'text-emerald-600 dark:text-[#3ecf8e]'
-                                  : 'text-rose-600 dark:text-rose-400'
-                              )}
-                            >
-                              {isCredit ? '+' : '-'}{formatINR(amountValue)}
-                            </span>
-
-                            <span
-                              className={cn(
-                                'px-1.5 py-0.2 rounded-[4px] text-[10px] font-mono font-medium border',
+                        return (
+                          <tr key={entry.id || idx} className="hover:bg-slate-50/80 dark:hover:bg-[#1a1a1a] transition-colors">
+                            <td className="py-2.5 px-3 text-[11px] text-slate-600 dark:text-zinc-400 whitespace-nowrap">
+                              {formatDate(entry.created_at, 'dd MMM, HH:mm')}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span className={cn(
+                                'px-1.5 py-0.2 rounded text-[10px] font-semibold border',
                                 isUpi
                                   ? 'bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-400 border-sky-200 dark:border-sky-500/20'
                                   : 'bg-emerald-50 dark:bg-[#3ecf8e]/10 text-emerald-700 dark:text-[#3ecf8e] border-emerald-200 dark:border-[#3ecf8e]/20'
-                              )}
-                            >
-                              {entry.wallet_type}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Middle Row: Primary Remarks Title */}
-                        <div className="space-y-1">
-                          <p className="text-xs font-medium text-slate-900 dark:text-zinc-100 font-sans leading-snug">
-                            {parsed.title}
-                          </p>
-
-                          {/* Transfer Mode Badge */}
-                          {parsed.modeDetails && (
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-[10px] font-mono text-sky-700 dark:text-sky-300">
-                              <Building2 className="w-2.5 h-2.5" />
-                              {parsed.modeDetails}
-                            </span>
-                          )}
-
-                          {/* Denomination Breakdown Chips */}
-                          {parsed.chips.length > 0 && (
-                            <div className="flex flex-wrap items-center gap-1 pt-0.5">
-                              {parsed.chips.map((chip, cIdx) => (
-                                <span
-                                  key={cIdx}
-                                  className="px-1.5 py-0.5 rounded-[4px] bg-slate-100 dark:bg-[#222222] border border-slate-200 dark:border-[#333333] text-[10px] font-mono font-medium text-slate-700 dark:text-[#A1A1A1] tabular-nums"
-                                >
-                                  {chip}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Bottom Row: Attribution & Actions */}
-                        <div className="pt-1.5 border-t border-slate-100 dark:border-[#242424] flex items-center justify-between text-[11px] font-sans">
-                          <div className="flex items-center gap-1 text-slate-500 dark:text-[#A1A1A1] truncate">
-                            <User className="w-3 h-3 text-slate-400 dark:text-[#737373] shrink-0" />
-                            <span className="truncate">
-                              By: <strong className="font-medium text-slate-900 dark:text-white">{entry.cashier_name || 'Cashier'}</strong>
-                            </span>
-                            {entry.authorized_by_name && (
-                              <span className="text-[10px] text-slate-400 dark:text-[#737373] truncate">
-                                (Auth: {entry.authorized_by_name})
+                              )}>
+                                {entry.wallet_type || 'Cash'}
                               </span>
+                            </td>
+                            <td className="py-2.5 px-3 text-right text-emerald-600 dark:text-[#3ecf8e] font-medium tabular-nums">
+                              {isCredit ? `+${formatINR(Number(entry.credit_amount))}` : '-'}
+                            </td>
+                            <td className="py-2.5 px-3 text-right text-rose-600 dark:text-rose-400 font-medium tabular-nums">
+                              {!isCredit && Number(entry.debit_amount) > 0 ? `-${formatINR(Number(entry.debit_amount))}` : '-'}
+                            </td>
+                            <td className="py-2.5 px-3 max-w-[200px] truncate font-sans text-slate-900 dark:text-zinc-200">
+                              <span className="block truncate" title={parsed.title}>{parsed.title}</span>
+                              {parsed.chips.length > 0 && (
+                                <span className="text-[10px] text-slate-400 dark:text-zinc-500 font-mono block truncate">
+                                  {parsed.chips.join(', ')}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-[11px] text-slate-600 dark:text-zinc-400 font-sans whitespace-nowrap">
+                              {entry.cashier_name || 'Cashier'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              /* TIMELINE FEED VIEW */
+              <div className="rounded-[8px] border border-slate-200 dark:border-[#242424] bg-slate-50 dark:bg-[#171717] p-3.5">
+                <div className="relative pl-6 before:absolute before:left-2.5 before:top-2 before:bottom-2 before:w-[2px] before:bg-slate-200 dark:before:bg-[#282828] space-y-3.5 max-h-[520px] overflow-y-auto pr-1">
+                  {filteredAllocations.map((entry, idx) => {
+                    const parsed = parseLedgerNotes(entry.remarks);
+                    const isCredit = Number(entry.credit_amount) > 0;
+                    const amountValue = isCredit ? Number(entry.credit_amount) : Number(entry.debit_amount) || 0;
+                    const isUpi = entry.wallet_type === 'UPI';
+
+                    return (
+                      <div key={entry.id || idx} className="relative group">
+                        {/* Timeline Node Marker */}
+                        <div
+                          className={cn(
+                            'absolute -left-6 top-1.5 w-5 h-5 rounded-full border flex items-center justify-center transition-transform group-hover:scale-110',
+                            isUpi
+                              ? 'bg-sky-50 dark:bg-sky-950/60 border-sky-200 dark:border-sky-700 text-sky-600 dark:text-sky-400'
+                              : 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-700 text-emerald-600 dark:text-[#3ecf8e]'
+                          )}
+                        >
+                          {isUpi ? (
+                            <QrCode className="w-2.5 h-2.5" />
+                          ) : (
+                            <Coins className="w-2.5 h-2.5" />
+                          )}
+                        </div>
+
+                        {/* Timeline Card */}
+                        <div className="p-3 rounded-[8px] bg-white dark:bg-[#141414] border border-slate-200 dark:border-[#242424] hover:border-slate-300 dark:hover:border-[#383838] transition-all space-y-2 shadow-xs">
+                          {/* Top Row: Date/Time + Amount + Mode */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-[#A1A1A1] font-mono">
+                              <Clock className="w-3 h-3 text-slate-400 dark:text-[#737373]" />
+                              <span>{formatDate(entry.created_at, 'dd MMM, HH:mm')}</span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={cn(
+                                  'font-mono font-medium text-xs tabular-nums',
+                                  isCredit
+                                    ? 'text-emerald-600 dark:text-[#3ecf8e]'
+                                    : 'text-rose-600 dark:text-rose-400'
+                                )}
+                              >
+                                {isCredit ? '+' : '-'}{formatINR(amountValue)}
+                              </span>
+
+                              <span
+                                className={cn(
+                                  'px-1.5 py-0.2 rounded-[4px] text-[10px] font-mono font-medium border',
+                                  isUpi
+                                    ? 'bg-sky-50 dark:bg-sky-500/10 text-sky-700 dark:text-sky-400 border-sky-200 dark:border-sky-500/20'
+                                    : 'bg-emerald-50 dark:bg-[#3ecf8e]/10 text-emerald-700 dark:text-[#3ecf8e] border-emerald-200 dark:border-[#3ecf8e]/20'
+                                )}
+                              >
+                                {entry.wallet_type}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Middle Row: Primary Remarks Title */}
+                          <div className="space-y-1">
+                            <p className="text-xs font-medium text-slate-900 dark:text-zinc-100 font-sans leading-snug">
+                              {parsed.title}
+                            </p>
+
+                            {/* Transfer Mode Badge */}
+                            {parsed.modeDetails && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[4px] bg-sky-50 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800 text-[10px] font-mono text-sky-700 dark:text-sky-300">
+                                <Building2 className="w-2.5 h-2.5" />
+                                {parsed.modeDetails}
+                              </span>
+                            )}
+
+                            {/* Denomination Breakdown Chips */}
+                            {parsed.chips.length > 0 && (
+                              <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                                {parsed.chips.map((chip, cIdx) => (
+                                  <span
+                                    key={cIdx}
+                                    className="px-1.5 py-0.5 rounded-[4px] bg-slate-100 dark:bg-[#222222] border border-slate-200 dark:border-[#333333] text-[10px] font-mono font-medium text-slate-700 dark:text-[#A1A1A1] tabular-nums"
+                                  >
+                                    {chip}
+                                  </span>
+                                ))}
+                              </div>
                             )}
                           </div>
 
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => copyToClipboard(String(amountValue), `Copied ₹${amountValue}`)}
-                              className="px-1.5 py-0.5 rounded-[4px] border border-slate-200 dark:border-[#2e2e2e] bg-slate-50 dark:bg-[#1a1a1a] hover:bg-slate-100 dark:hover:bg-[#222222] text-slate-600 dark:text-[#A1A1A1] hover:text-slate-900 dark:hover:text-white text-[10px] font-sans transition-colors cursor-pointer"
-                            >
-                              Copy ₹
-                            </button>
+                          {/* Bottom Row: Attribution & Actions */}
+                          <div className="pt-1.5 border-t border-slate-100 dark:border-[#242424] flex items-center justify-between text-[11px] font-sans">
+                            <div className="flex items-center gap-1 text-slate-500 dark:text-[#A1A1A1] truncate">
+                              <User className="w-3 h-3 text-slate-400 dark:text-[#737373] shrink-0" />
+                              <span className="truncate">
+                                By: <strong className="font-medium text-slate-900 dark:text-white">{entry.cashier_name || 'Cashier'}</strong>
+                              </span>
+                              {entry.authorized_by_name && (
+                                <span className="text-[10px] text-slate-400 dark:text-[#737373] truncate">
+                                  (Auth: {entry.authorized_by_name})
+                                </span>
+                              )}
+                            </div>
 
-                            {/* Row Dropdown */}
-                            <div className="relative" data-dropdown-id={`alloc-${entry.id || idx}`}>
+                            <div className="flex items-center gap-1 shrink-0">
                               <button
                                 type="button"
-                                onClick={() => setActiveRowDropdownId(activeRowDropdownId === `alloc-${entry.id || idx}` ? null : `alloc-${entry.id || idx}`)}
-                                className="p-1 rounded-[4px] hover:bg-slate-100 dark:hover:bg-[#282828] text-slate-400 dark:text-[#737373] hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
-                                title="Actions & JSON"
+                                onClick={() => copyToClipboard(String(amountValue), `Copied ₹${amountValue}`)}
+                                className="px-1.5 py-0.5 rounded-[4px] border border-slate-200 dark:border-[#2e2e2e] bg-slate-50 dark:bg-[#1a1a1a] hover:bg-slate-100 dark:hover:bg-[#222222] text-slate-600 dark:text-[#A1A1A1] hover:text-slate-900 dark:hover:text-white text-[10px] font-sans transition-colors cursor-pointer"
                               >
-                                <MoreVertical className="w-3 h-3" />
+                                Copy ₹
                               </button>
-
-                              {activeRowDropdownId === `alloc-${entry.id || idx}` && (
-                                <div
-                                  className={cn(
-                                    "absolute right-0 w-44 rounded-[8px] bg-white dark:bg-[#1c1c1c] border border-slate-200 dark:border-[#2e2e2e] shadow-2xl p-1.5 z-40 space-y-1 text-xs font-sans text-left",
-                                    idx >= Math.max(1, filteredAllocations.length - 2) ? 'bottom-7' : 'top-7'
-                                  )}
-                                >
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      copyToClipboard(String(entry.id), 'Copied Entry ID');
-                                      setActiveRowDropdownId(null);
-                                    }}
-                                    className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-[#282828] text-slate-800 dark:text-[#e0e0e0] hover:text-slate-900 dark:hover:text-white cursor-pointer"
-                                  >
-                                    <Copy className="w-3.5 h-3.5 text-slate-400 dark:text-[#737373]" />
-                                    <span>Copy Record ID</span>
-                                  </button>
-                                  {isDeveloper && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        copyToClipboard(JSON.stringify(entry, null, 2), 'Copied JSON');
-                                        setActiveRowDropdownId(null);
-                                      }}
-                                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded hover:bg-slate-100 dark:hover:bg-[#282828] text-slate-800 dark:text-[#e0e0e0] hover:text-slate-900 dark:hover:text-white cursor-pointer"
-                                    >
-                                      <Code className="w-3.5 h-3.5 text-sky-600 dark:text-sky-400" />
-                                      <span>Copy Record JSON</span>
-                                    </button>
-                                  )}
-                                </div>
-                              )}
                             </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
 
-                {filteredAllocations.length === 0 && (
-                  <div className="py-12 text-center text-xs font-sans text-slate-400 dark:text-[#737373]">
-                    No treasury records found matching the current filters.
-                  </div>
-                )}
+                  {filteredAllocations.length === 0 && (
+                    <div className="py-12 text-center text-xs font-sans text-slate-400 dark:text-[#737373]">
+                      No treasury records found matching the current filters.
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Ledger Summary Footer */}
             <div className="p-3 bg-slate-50 dark:bg-[#171717] border border-slate-200 dark:border-[#242424] rounded-[8px] flex items-center justify-between text-xs font-mono">
               <span className="text-slate-600 dark:text-[#A1A1A1] font-sans font-medium">
-                Total Filtered Top-ups ({filteredAllocations.length})
+                Total Top-ups ({filteredAllocations.length} entries)
               </span>
               <span className="font-medium text-emerald-600 dark:text-[#3ecf8e] tabular-nums">
-                {formatINR(ledgerTotalSum)}
+                {formatINR(treasurySummary.totalFloatTopups)}
               </span>
             </div>
           </div>

@@ -305,7 +305,7 @@ export const NewAdvanceDrawer: React.FC<NewAdvanceDrawerProps> = ({ onSuccess })
       title="Give Staff Advance"
       subtitle="Give salary advance or emergency money to staff from cash box or UPI"
       badge={drawerBadge}
-      size="full"
+      size="xl"
       footer={drawerFooter}
     >
       <form onSubmit={handleSubmit} className="max-w-4xl mx-auto w-full space-y-4">

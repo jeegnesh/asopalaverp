@@ -97,7 +97,7 @@ export const KeyboardShortcutsModal: React.FC = () => {
     <div
       ref={backdropRef}
       onClick={handleClose}
-      className="fixed inset-0 z-50 bg-black/60 dark:bg-black/80 backdrop-blur-xs flex items-center justify-center p-4 select-none font-sans"
+      className="fixed inset-0 z-50 bg-black/60 dark:bg-black/80 backdrop-blur-md flex items-center justify-center p-4 select-none font-sans"
     >
       <div
         ref={modalRef}

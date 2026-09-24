@@ -2081,7 +2081,7 @@ export const StaffAdvancesPage: React.FC = () => {
 
         {/* 8. Action Confirmation Modal (Salary Deduction / Waive / Delete) */}
         {actionModal.type && actionModal.advance && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 dark:bg-black/75 backdrop-blur-md animate-in fade-in duration-150">
             <div className="w-full max-w-md bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-[12px] shadow-2xl p-5 space-y-4 text-xs font-sans">
               <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-[#282828]">
                 <div
@@ -2217,7 +2217,7 @@ export const StaffAdvancesPage: React.FC = () => {
 
         {/* Thermal Receipt Slip Modal (With Digital Touch Signature) */}
         {selectedSlipAdvance && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs select-none font-sans overflow-y-auto">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 dark:bg-black/75 backdrop-blur-md select-none font-sans overflow-y-auto">
             <div className="relative w-full max-w-md bg-white dark:bg-[#181818] border border-slate-200 dark:border-[#282828] rounded-[12px] p-6 shadow-2xl flex flex-col items-center space-y-4 my-auto animate-in fade-in zoom-in-95 duration-150">
               <div className="flex items-center justify-between w-full pb-3 border-b border-slate-200 dark:border-[#282828]">
                 <div className="flex items-center gap-2">

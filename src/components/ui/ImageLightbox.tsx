@@ -35,22 +35,23 @@ export const ImageLightbox: React.FC = () => {
   return (
     <div
       onClick={closeLightbox}
-      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex flex-col items-center justify-between p-4 select-none animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 bg-black/60 dark:bg-black/75 backdrop-blur-xl flex flex-col items-center justify-between p-4 select-none animate-in fade-in duration-200"
     >
       {/* Top Controls Bar */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-xl flex items-center justify-between p-2 rounded-[6px] bg-white/95 dark:bg-[#171717]/95 border border-slate-200 dark:border-[#282828] backdrop-blur-md shadow-lg"
+        className="w-full max-w-xl flex items-center justify-between p-2 rounded-[8px] bg-white/90 dark:bg-[#171717]/90 border border-slate-200 dark:border-[#282828] backdrop-blur-xl shadow-2xl"
       >
-        <span className="text-xs font-mono text-slate-900 dark:text-white px-2">
-          Image Document Lightbox
+        <span className="text-xs font-mono font-medium text-slate-900 dark:text-white px-2 flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-[#3ecf8e]" />
+          <span>Image Document Lightbox</span>
         </span>
 
         <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={() => setScale((s) => Math.min(3, s + 0.25))}
-            className="p-1.5 rounded-[4px] text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#242424] transition-colors"
+            className="p-1.5 rounded-[6px] text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#242424] transition-colors cursor-pointer"
             title="Zoom In"
           >
             <ZoomIn className="w-4 h-4" />
@@ -58,7 +59,7 @@ export const ImageLightbox: React.FC = () => {
           <button
             type="button"
             onClick={() => setScale((s) => Math.max(0.5, s - 0.25))}
-            className="p-1.5 rounded-[4px] text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#242424] transition-colors"
+            className="p-1.5 rounded-[6px] text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#242424] transition-colors cursor-pointer"
             title="Zoom Out"
           >
             <ZoomOut className="w-4 h-4" />
@@ -66,7 +67,7 @@ export const ImageLightbox: React.FC = () => {
           <button
             type="button"
             onClick={() => setRotation((r) => (r + 90) % 360)}
-            className="p-1.5 rounded-[4px] text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#242424] transition-colors"
+            className="p-1.5 rounded-[6px] text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#242424] transition-colors cursor-pointer"
             title="Rotate 90°"
           >
             <RotateCw className="w-4 h-4" />
@@ -76,7 +77,7 @@ export const ImageLightbox: React.FC = () => {
             download="asopalav-proof-document.png"
             target="_blank"
             rel="noopener noreferrer"
-            className="p-1.5 rounded-[4px] text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#242424] transition-colors"
+            className="p-1.5 rounded-[6px] text-slate-500 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#242424] transition-colors cursor-pointer"
             title="Download Document"
           >
             <Download className="w-4 h-4" />
@@ -84,7 +85,7 @@ export const ImageLightbox: React.FC = () => {
           <button
             type="button"
             onClick={closeLightbox}
-            className="p-1.5 rounded-[4px] text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors ml-1"
+            className="p-1.5 rounded-[6px] text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition-colors ml-1 cursor-pointer"
             title="Close"
           >
             <X className="w-4 h-4" />
@@ -104,12 +105,12 @@ export const ImageLightbox: React.FC = () => {
             transform: `scale(${scale}) rotate(${rotation}deg)`,
             transition: 'transform 0.15s ease-out',
           }}
-          className="max-w-full max-h-[75vh] object-contain rounded-[6px] border border-slate-200 dark:border-[#282828] shadow-2xl bg-white"
+          className="max-w-full max-h-[78vh] object-contain rounded-[10px] border border-slate-200/80 dark:border-[#333333] shadow-2xl bg-white dark:bg-[#1a1a1a]"
         />
       </div>
 
       {/* Bottom Hint */}
-      <div className="text-[11px] font-mono text-zinc-400">
+      <div className="text-[11px] font-mono text-zinc-300 dark:text-zinc-400 px-3 py-1 rounded-full bg-black/50 dark:bg-black/60 backdrop-blur-md border border-white/10 shadow-lg">
         Tap anywhere outside or press ESC to close
       </div>
     </div>

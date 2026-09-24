@@ -299,23 +299,27 @@ export const SafeDropDrawer: React.FC<SafeDropDrawerProps> = ({
                   <button
                     key={val}
                     type="button"
-                    onClick={() => handleSetExact(val)}
+                    onClick={() => handleQuickAdd(val)}
                     disabled={disabled}
                     className="px-2.5 py-1.5 rounded-[6px] bg-slate-100 dark:bg-[#202020] hover:bg-slate-200 dark:hover:bg-[#2a2a2a] border border-slate-200 dark:border-[#2e2e2e] text-xs font-mono font-semibold text-slate-800 dark:text-zinc-200 transition-colors cursor-pointer active:scale-95 disabled:opacity-30 disabled:pointer-events-none shadow-2xs"
                   >
-                    {formatINR(val)}
+                    +₹{val >= 1000 ? `${(val / 1000).toLocaleString('en-IN')}k` : val}
                   </button>
                 );
               })}
 
-              <button
-                type="button"
-                onClick={() => handleQuickAdd(5000)}
-                disabled={currentCashBalance <= numAmount}
-                className="px-2.5 py-1.5 rounded-[6px] bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-xs font-mono font-semibold text-emerald-700 dark:text-[#3ecf8e] transition-colors cursor-pointer active:scale-95 disabled:opacity-30 disabled:pointer-events-none shadow-2xs"
-              >
-                +₹5,000
-              </button>
+              {numAmount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    triggerHaptic('light');
+                    setAmount('');
+                  }}
+                  className="px-2.5 py-1.5 rounded-[6px] text-xs font-mono text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-colors cursor-pointer"
+                >
+                  Clear
+                </button>
+              )}
             </div>
           </div>
         </div>
